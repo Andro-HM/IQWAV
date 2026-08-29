@@ -15,6 +15,78 @@ Newest entries should be added at the top below this introduction.
 
 
 ---
+## 2026-08-30 — FFT Magnitude Spectrum Utility Implemented
+
+### Added
+
+Created:
+
+`src/iqwav/dsp/spectrum.py`
+
+with:
+
+`magnitude_spectrum(samples, fs, fftshift=True)`
+
+### Capability
+
+The function:
+
+- accepts real or complex 1-D NumPy signal arrays,
+- computes the FFT,
+- computes raw FFT magnitude,
+- generates the corresponding frequency axis in Hz,
+- optionally applies FFT shift so frequency ordering becomes:
+
+negative frequencies → 0 → positive frequencies.
+
+### Validation
+
+Added checks for:
+
+- invalid or non-finite sampling frequency,
+- non-1-D input,
+- empty arrays,
+- NaN or infinite samples.
+
+### Tests
+
+Added:
+
+`tests/unit/test_spectrum.py`
+
+Current total:
+
+- 66 tests passing.
+
+Spectrum tests verify:
+
+- output length,
+- correct frequency-axis construction,
+- real-tone peaks at ±f,
+- complex IQ tone peak at the correct signed frequency,
+- shifted and unshifted FFT ordering,
+- invalid input handling.
+
+### Manual Verification
+
+Used:
+
+`notebooks/learning/01_tone_generation.ipynb`
+
+to visually inspect the generated IQ spectrum and confirmed the expected spectral peak location.
+
+### Current Capability
+
+IQWAV now supports:
+
+known synthetic tone generation
+→ FFT spectrum analysis
+→ frequency-domain verification.
+
+### Next
+
+Continue building foundational DSP analysis utilities.
+
 ## 2026-08-29 — Synthetic Tone Generator Implemented
 
 ### Added
