@@ -13,7 +13,89 @@ It answers:
 
 Newest entries should be added at the top below this introduction.
 
+
 ---
+## 2026-08-29 — Synthetic Tone Generator Implemented
+
+### Added
+
+Created:
+
+`src/iqwav/modulation/tones.py`
+
+with reusable generators for:
+
+- real cosine tones,
+- complex IQ tones.
+
+Both support:
+
+- sampling frequency,
+- tone frequency,
+- duration,
+- amplitude,
+- phase.
+
+### Validation
+
+Added checks for:
+
+- invalid sampling frequency,
+- invalid duration,
+- negative amplitude,
+- non-finite values,
+- Nyquist violations,
+- impossible sample counts,
+- extreme `fs * duration` overflow.
+
+For complex IQ tones, the exact Nyquist boundary is rejected because positive and negative frequency become indistinguishable there.
+
+### Tests
+
+Added:
+
+`tests/unit/test_tones.py`
+
+Current result:
+
+- 52 tests passing.
+
+Tests cover:
+
+- sample count,
+- time spacing,
+- data types,
+- amplitude,
+- phase,
+- known sample sequences,
+- FFT frequency location,
+- positive/negative IQ behavior,
+- Nyquist policy,
+- invalid inputs.
+
+### Manual Verification
+
+Created:
+
+`notebooks/learning/01_tone_generation.ipynb`
+
+and visually verified:
+
+- real cosine waveform,
+- I and Q components,
+- circular IQ trajectory,
+- opposite rotation for positive and negative IQ frequency.
+
+### Current Capability
+
+IQWAV can now generate deterministic real and complex synthetic tones with known ground-truth parameters for downstream DSP testing.
+
+### Next
+
+Implement reusable FFT/spectrum analysis utilities for known synthetic signals.
+
+
+
 ## 2026-08-29 — Modules 7–8 Completed and Python Environment Established
 
 ### Learning Progress
