@@ -1,0 +1,58 @@
+# Python environments
+.venv/
+venv/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets / local configuration
+.env
+.env.*
+
+# Raw and generated datasets
+data/raw/*
+!data/raw/.gitkeep
+
+data/external/*
+!data/external/.gitkeep
+
+data/processed/*
+!data/processed/.gitkeep
+
+data/synthetic/*
+!data/synthetic/.gitkeep
+
+# Generated outputs
+outputs/plots/*
+!outputs/plots/.gitkeep
+
+outputs/reports/*
+!outputs/reports/.gitkeep
+
+outputs/runs/*
+!outputs/runs/.gitkeep
+
+# Trained model checkpoints
+models/checkpoints/*
+!models/checkpoints/.gitkeep
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs/temp
+*.log
+*.tmp
