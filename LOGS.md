@@ -15,6 +15,88 @@ Newest entries should be added at the top below this introduction.
 
 
 ---
+## 2026-08-30 — Spectrogram / Waterfall Data Utility Implemented
+
+### Added
+
+Created:
+
+`src/iqwav/dsp/spectrogram.py`
+
+with:
+
+`spectrogram_data(samples, fs, nperseg=256, noverlap=None)`
+
+### Capability
+
+IQWAV can now compute time-frequency power data for a signal.
+
+The function returns:
+
+- time axis in seconds,
+- frequency axis in Hz,
+- spectrogram power matrix in linear units.
+
+The frequency axis is arranged as:
+
+negative frequencies → 0 → positive frequencies.
+
+The returned power matrix has shape:
+
+`(number of frequency bins, number of time segments)`
+
+This data will later support the GUI waterfall / spectrogram view required by the SIH problem statement.
+
+### Validation
+
+Added checks for:
+
+- invalid/non-finite sampling frequency,
+- non-1-D signals,
+- empty signals,
+- NaN/Inf samples,
+- invalid `nperseg`,
+- invalid `noverlap`.
+
+### Tests
+
+Added:
+
+`tests/unit/test_spectrogram.py`
+
+Current total:
+
+- 108 tests passing.
+
+Tests verify:
+
+- output dimensions,
+- increasing time axis,
+- centered frequency ordering,
+- correct signed frequency detection across time,
+- invalid-input handling.
+
+### Manual Verification
+
+Used a stationary `-100 Hz` IQ tone and plotted the returned spectrogram data.
+
+Observed a horizontal power ridge around `-100 Hz` across time, as expected for a constant-frequency signal.
+
+### Current Capability
+
+IQWAV now supports:
+
+known tone generation
+→ FFT magnitude
+→ periodogram PSD
+→ Welch PSD
+→ spectrogram / waterfall data.
+
+### Next
+
+Continue foundational DSP utilities.
+
+
 ## 2026-08-30 — PSD Utilities Implemented
 
 ### Added
