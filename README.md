@@ -199,14 +199,16 @@ Current completed curriculum:
 - Module 4 — Filtering
 - Module 5 — Noise and channel effects
 - Module 6 — Analog modulation
+- Module 7 — Digital communication fundamentals
+- Module 8 — Digital modulation
 
 Current next module:
 
-- Module 7 — Digital communication fundamentals
+- Module 9 — Correlation & statistical signal analysis
 
-Therefore the implementation should currently concentrate primarily on functionality supported by Modules 0–6.
+Therefore the implementation may now include controlled digital-communication functionality supported by Modules 0–8.
 
-Do NOT assume later blind-analysis, synchronization, AMR, FEC or framing concepts have already been implemented.
+Do NOT yet assume blind parameter estimation, synchronization, AMR, blind FEC or framing capability exists.
 
 ---
 
