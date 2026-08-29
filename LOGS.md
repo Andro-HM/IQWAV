@@ -15,6 +15,87 @@ Newest entries should be added at the top below this introduction.
 
 
 ---
+## 2026-08-30 — PSD Utilities Implemented
+
+### Added
+
+Created:
+
+`src/iqwav/dsp/psd.py`
+
+with:
+
+- `periodogram_psd(samples, fs)`
+- `welch_psd(samples, fs, nperseg=None)`
+
+### Capability
+
+IQWAV can now estimate power spectral density using:
+
+- a standard periodogram,
+- Welch averaged PSD.
+
+Both functions return:
+
+- frequency axis in Hz,
+- PSD values in linear units.
+
+Outputs are arranged as:
+
+negative frequencies → 0 → positive frequencies.
+
+### Validation
+
+Added checks for:
+
+- invalid/non-finite sampling frequency,
+- non-1-D signals,
+- empty signals,
+- NaN/Inf samples,
+- invalid `nperseg`.
+
+### Tests
+
+Added:
+
+`tests/unit/test_psd.py`
+
+Current total:
+
+- 89 tests passing.
+
+Tests verify:
+
+- output size,
+- centered frequency ordering,
+- real-tone symmetric PSD peaks,
+- signed complex-IQ peak location,
+- default and explicit Welch segment lengths,
+- invalid-input handling.
+
+### Manual Verification
+
+Used the learning notebook to compare periodogram and Welch PSD.
+
+Observed:
+
+- periodogram gives a sharper/taller peak for the clean synthetic tone,
+- Welch gives a broader/smoother peak due to segment averaging.
+
+### Current Capability
+
+IQWAV now supports:
+
+known tone generation
+→ FFT magnitude analysis
+→ periodogram PSD
+→ Welch PSD.
+
+### Next
+
+Continue foundational DSP processing and visualization utilities.
+
+
 ## 2026-08-30 — FFT Magnitude Spectrum Utility Implemented
 
 ### Added
