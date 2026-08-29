@@ -16,6 +16,74 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+
+## 2026-08-30 — Signal Power and AWGN Utilities Implemented
+
+### Added
+
+Created:
+
+`src/iqwav/dsp/noise.py`
+
+with:
+
+- `signal_power(samples)`
+- `add_awgn(samples, snr_db, rng=None)`
+
+### Capability
+
+IQWAV can now:
+
+- compute average signal power using `mean(|x|^2)`,
+- add controlled additive white Gaussian noise,
+- generate real Gaussian noise for real signals,
+- generate circular complex Gaussian noise for IQ signals,
+- target a requested SNR in dB,
+- reproduce noise deterministically using a seeded NumPy RNG.
+
+### Tests
+
+Added:
+
+`tests/unit/test_noise.py`
+
+Current total:
+
+- 154 tests passing.
+
+Tests verify:
+
+- known signal powers,
+- real and complex noise behavior,
+- shape and dtype preservation,
+- seeded reproducibility,
+- measured SNR near requested values,
+- invalid-input handling.
+
+### Manual Verification
+
+Compared clean and noisy IQ signals in the learning notebook.
+
+Verified that:
+
+- the waveform becomes visibly noisy,
+- the desired tone remains present,
+- the spectrum develops a noise floor around the tone.
+
+### Current Capability
+
+IQWAV now supports:
+
+known signal generation
+→ controlled noise injection
+→ FFT / PSD / spectrogram analysis
+→ FIR filtering.
+
+### Next
+
+Continue controlled channel-impairment utilities.
+
+
 ## 2026-08-30 — FIR Filtering Utilities Implemented
 
 ### Added
