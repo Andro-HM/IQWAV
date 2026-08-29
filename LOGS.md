@@ -15,6 +15,84 @@ Newest entries should be added at the top below this introduction.
 
 
 ---
+
+## 2026-08-30 — FIR Filtering Utilities Implemented
+
+### Added
+
+Created:
+
+`src/iqwav/dsp/filters.py`
+
+with:
+
+- `design_lowpass_fir`
+- `design_highpass_fir`
+- `design_bandpass_fir`
+- `apply_fir_filter`
+
+### Capability
+
+IQWAV can now design and apply basic FIR filters for real and complex signals.
+
+Supported filter types:
+
+- low-pass,
+- high-pass,
+- band-pass.
+
+Filters are designed using `scipy.signal.firwin` and applied using `scipy.signal.lfilter`.
+
+### Validation
+
+Added validation for:
+
+- sampling frequency,
+- cutoff frequencies,
+- band-pass edge ordering,
+- FIR tap count,
+- signal shape and finiteness,
+- filter-tap shape and finiteness.
+
+### Tests
+
+Added:
+
+`tests/unit/test_filters.py`
+
+Current total:
+
+- 141 tests passing.
+
+Tests verify:
+
+- valid FIR coefficient generation,
+- low-pass behavior,
+- high-pass behavior,
+- band-pass behavior,
+- real and complex signal support,
+- output-length preservation,
+- invalid-input handling.
+
+### Manual Verification
+
+Created a mixed signal containing low- and high-frequency tones and applied a low-pass FIR filter.
+
+Verified in the spectrum that the low-frequency component remained while the high-frequency component was strongly attenuated.
+
+### Current Capability
+
+IQWAV now supports:
+
+known signal generation
+→ FFT/PSD/spectrogram analysis
+→ basic FIR filtering.
+
+### Next
+
+Continue foundational DSP utilities.
+
+
 ## 2026-08-30 — Spectrogram / Waterfall Data Utility Implemented
 
 ### Added
