@@ -15,6 +15,131 @@ Newest entries should be added at the top below this introduction.
 
 
 ---
+
+## 2026-08-30 — WAV and Raw IQ File Ingestion Implemented
+
+### Added
+
+Created:
+
+- `src/iqwav/io/wav.py`
+- `src/iqwav/io/raw_iq.py`
+
+Implemented:
+
+- `load_wav(path)`
+- `load_wav_iq(path, i_channel=0, q_channel=1)`
+- `load_raw_iq(path, dtype=np.float32, iq_order="IQ")`
+
+### Capability
+
+IQWAV can now load signal recordings from disk instead of operating only on arrays generated inside Python.
+
+Supported input paths:
+
+- standard WAV files,
+- multi-channel WAV interpreted explicitly as I/Q,
+- headerless interleaved raw IQ files.
+
+### WAV Behavior
+
+`load_wav`:
+
+- returns WAV sampling rate and samples,
+- preserves SciPy-loaded dtype and values,
+- supports mono and multi-channel WAV,
+- performs no amplitude normalization,
+- does not automatically guess I/Q channel meaning.
+
+`load_wav_iq`:
+
+- requires at least two WAV channels,
+- explicitly selects I and Q channels,
+- combines them as `I + jQ`,
+- returns a one-dimensional `complex128` IQ array.
+
+### Raw IQ Behavior
+
+`load_raw_iq`:
+
+- reads headerless raw files with `np.fromfile`,
+- supports explicit `"IQ"` or `"QI"` interleaving,
+- supports real scalar dtypes such as float32 and int16,
+- returns `complex128` IQ samples.
+
+It deliberately does not infer:
+
+- dtype,
+- endianness,
+- IQ ordering,
+- sampling rate,
+- center frequency.
+
+These must currently be provided from metadata or operator knowledge.
+
+### Tests
+
+Added:
+
+`tests/unit/test_io.py`
+
+Current total:
+
+- 268 tests passing.
+
+Tests verify:
+
+- mono WAV round-trip,
+- stereo WAV round-trip,
+- sampling-rate preservation,
+- dtype/value preservation,
+- exact WAV I/Q reconstruction,
+- alternate channel selection,
+- float32 raw IQ reconstruction,
+- int16 raw IQ reconstruction,
+- QI ordering,
+- invalid path/input/channel/order/dtype handling.
+
+### Manual Verification
+
+Created:
+
+`notebooks/learning/03_file_io_and_signal_analysis.ipynb`
+
+Verified the complete path:
+
+`known IQ signal`
+→ save as WAV/raw IQ
+→ reload from disk
+→ reconstruct complex IQ
+→ FFT / PSD / spectrogram.
+
+A known 125 Hz complex IQ tone was recovered from both WAV and raw IQ files, and FFT analysis detected the expected 125 Hz spectral peak.
+
+The WAV-loaded and raw-loaded IQ arrays matched each other and matched the original signal within expected floating-point precision.
+
+### Current Capability
+
+IQWAV now supports:
+
+`file on disk`
+→ WAV/raw IQ ingestion
+→ complex NumPy IQ samples
+→ FFT
+→ PSD
+→ spectrogram
+→ existing DSP and demodulation utilities.
+
+### Limitation
+
+Raw IQ is headerless, so its representation cannot currently be determined automatically.
+
+### Next
+
+Begin analysis of externally sourced/real IQ recordings rather than only self-generated files.
+
+
+
 ## 2026-08-30 — Known-Timing BPSK/QPSK Demodulation Implemented
 
 ### Added
