@@ -15,6 +15,98 @@ Newest entries should be added at the top below this introduction.
 
 
 ---
+## 2026-08-30 — Known-Timing BPSK/QPSK Demodulation Implemented
+
+### Added
+
+Created:
+
+`src/iqwav/demod/digital.py`
+
+with:
+
+- `bpsk_demodulate(samples, samples_per_symbol)`
+- `qpsk_demodulate(samples, samples_per_symbol)`
+
+### Capability
+
+IQWAV can now perform known-timing hard-decision demodulation for BPSK and QPSK.
+
+Receiver assumptions:
+
+- symbol boundaries are already known,
+- no timing recovery,
+- no carrier recovery,
+- no CFO correction,
+- no phase correction.
+
+For each symbol interval, samples are block-averaged and then mapped back to bits using the corresponding decision regions.
+
+### BPSK Decision Rule
+
+- `real(symbol_average) >= 0` → bit `0`
+- `real(symbol_average) < 0` → bit `1`
+
+### QPSK Decision Rule
+
+Using the existing Gray mapping:
+
+- `I >= 0, Q >= 0` → `00`
+- `I < 0, Q >= 0` → `01`
+- `I < 0, Q < 0` → `11`
+- `I >= 0, Q < 0` → `10`
+
+### Tests
+
+Added:
+
+`tests/unit/test_digital_demodulation.py`
+
+Current total:
+
+- 251 tests passing.
+
+Tests verify:
+
+- clean BPSK round-trip,
+- clean QPSK round-trip,
+- all four QPSK Gray-mapped quadrants,
+- `samples_per_symbol = 1`,
+- real BPSK input,
+- correct recovered bit counts,
+- successful seeded recovery after moderate AWGN,
+- invalid input handling.
+
+### Manual Verification
+
+Verified end-to-end synthetic communication chains:
+
+`bits → BPSK waveform → AWGN → BPSK demodulation → recovered bits`
+
+and:
+
+`bits → QPSK waveform → AWGN → QPSK demodulation → recovered bits`
+
+Recovered bits matched the transmitted bits in the controlled notebook test.
+
+### Current Capability
+
+IQWAV now supports:
+
+`bits`
+→ BPSK/QPSK symbol mapping
+→ sampled rectangular waveform
+→ AWGN / CFO / phase impairment injection
+→ known-timing hard-decision demodulation
+→ recovered bits.
+
+### Limitation
+
+The receiver currently assumes perfect symbol timing and does not estimate or correct timing, carrier frequency offset, or phase.
+
+### Next
+
+Add real `.wav` and raw IQ file ingestion before expanding receiver complexity.
 
 
 ## 2026-08-30 — Signal Power and AWGN Utilities Implemented
