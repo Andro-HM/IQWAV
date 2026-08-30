@@ -502,13 +502,61 @@ When proposing major architectural changes, explain why the change is necessary 
 
 # 13. Current Development Status
 
-Repository infrastructure has been created.
+IQWAV now has a tested foundational signal-processing and digital-communication layer.
 
-Git has been initialized locally.
+Implemented production functionality currently includes:
 
-No actual IQWAV processing functionality has yet been integrated into the production codebase.
+- synthetic real and complex IQ tone generation,
+- FFT magnitude spectrum computation,
+- periodogram and Welch PSD estimation,
+- spectrogram / waterfall computation,
+- FIR low-pass, high-pass and band-pass filtering,
+- signal-power measurement and AWGN injection,
+- controlled frequency-offset and phase-offset injection,
+- BPSK modulation and known-timing hard-decision demodulation,
+- QPSK Gray mapping and known-timing hard-decision demodulation,
+- rectangular sampled baseband waveform generation,
+- WAV ingestion,
+- stereo WAV I/Q conversion,
+- known-format raw interleaved IQ ingestion.
 
-The first implementation milestone will be chosen based on functionality supported by completed curriculum Modules 0–6.
+The current implementation supports controlled experiments based on curriculum Modules 0–8.
+
+It does NOT yet provide:
+
+- blind sampling-format inference,
+- automatic occupied-bandwidth estimation,
+- carrier/CFO estimation or correction,
+- SNR/noise-floor estimation,
+- blind symbol/baud-rate estimation,
+- carrier or symbol synchronization,
+- automatic modulation recognition,
+- FSK/QAM demodulation,
+- de-interleaving,
+- FEC identification or decoding,
+- framing/header/payload recovery,
+- complete end-to-end GUI processing.
+
+## Real-world validation
+
+The raw-IQ ingestion and basic DSP path has been smoke-tested successfully on a genuine over-the-air broadcast FM SDR capture:
+
+- sample rate: 250 kHz,
+- center frequency: 99.5 MHz,
+- format: complex64 / interleaved float32 I,Q,
+- 1,000,000 complex samples,
+- duration: 4 seconds.
+
+The recording was successfully processed through:
+
+`load_raw_iq()`
+→ `magnitude_spectrum()`
+→ `welch_psd()`
+→ `spectrogram_data()`
+
+The resulting time-domain IQ, FFT, PSD and waterfall were physically plausible and mutually consistent.
+
+This establishes that the current foundation works on at least one genuine OTA SDR recording, not only on synthetic test data.
 
 For exact development history and current next action, see:
 

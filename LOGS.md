@@ -16,6 +16,46 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+
+## 2026-08-30 — Real OTA IQ smoke test passed
+
+### What was tested
+- Downloaded a genuine over-the-air FM IQ recording:
+  `fm_rds_250k_1Msamples.iq`
+- Known metadata:
+  - sample rate: 250 kHz
+  - center frequency: 99.5 MHz
+  - format: complex64 / interleaved float32 I,Q
+  - 1,000,000 complex samples
+  - duration: 4 seconds
+- Stored locally under:
+  `data/external/fm_rds_250k_1Msamples.iq`
+  and kept out of Git by `.gitignore`.
+
+### IQWAV path exercised
+- `load_raw_iq()`
+- `magnitude_spectrum()`
+- `welch_psd()`
+- `spectrogram_data()`
+
+### Verification
+- IQWAV loader matched direct NumPy complex64 loading.
+- Time-domain I/Q samples looked physically plausible.
+- FFT showed a broad real FM spectrum across the expected ±125 kHz Nyquist span.
+- Welch PSD showed consistent occupied spectral structure.
+- Waterfall showed time-varying broadband FM energy with sensible frequency/time orientation.
+- No obvious corruption, axis error, clipping, or file-format mismatch was observed.
+
+### Result
+PASS — current IQWAV raw-IQ ingestion and basic spectral-analysis foundation successfully processed a genuine OTA SDR capture.
+
+### Notes
+- Real data is visibly less ideal than synthetic data: asymmetry, spectral bumps, offsets, and time-varying structure are present.
+- These effects should not be artificially cleaned up at this stage; future estimators must handle them.
+- No FM demodulation or blind parameter estimation was performed in this milestone.
+
+
+
 ## 2026-08-30 — WAV and Raw IQ File Ingestion Implemented
 
 ### Added
