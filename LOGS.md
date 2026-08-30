@@ -17,6 +17,57 @@ Newest entries should be added at the top below this introduction.
 ---
 
 
+## 2026-08-30 — FM demodulation productionized and real-data verified
+
+### Implementation
+Added reusable FM phase-discriminator support:
+
+- `src/iqwav/demod/analog.py`
+  - `fm_demodulate(samples)`
+- exported through `src/iqwav/demod/__init__.py`
+- added focused unit tests in:
+  - `tests/unit/test_analog_demodulation.py`
+
+The discriminator computes:
+
+`angle(samples[1:] * conj(samples[:-1]))`
+
+and returns phase increment in radians/sample.
+
+It intentionally does not perform:
+- `Fs/(2π)` scaling,
+- DC removal,
+- filtering,
+- resampling,
+- normalization,
+- de-emphasis,
+- stereo decoding,
+- carrier/CFO estimation.
+
+### Automated verification
+- Focused FM-demodulation tests: 11 passed.
+- Full project suite: 279 passed.
+
+Tests cover:
+- output shape and dtype,
+- positive and negative phase increments,
+- wrapped phase differences,
+- amplitude invariance,
+- invalid real/multidimensional input,
+- insufficient samples,
+- NaN/Inf rejection.
+
+### Real OTA integration verification
+The production `fm_demodulate()` function replaced the manual discriminator in:
+
+`notebooks/experiments/02_real_fm_demodulation.ipynb`
+
+Using the genuine 99.5 MHz broadcast-FM IQ recording, the production function successfully produced the same demodulated multiplex spectrum and recovered approximately 4 seconds of clean, clearly intelligible English audio after low-pass filtering and resampling.
+
+### Result
+PASS — the reusable FM discriminator is unit-tested, integration-tested and manually verified on genuine OTA IQ data.
+
+
 ## 2026-08-30 — Real OTA IQ smoke test passed
 
 ### What was tested
