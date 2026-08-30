@@ -16,6 +16,77 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-08-30 — Wideband OTA FM channelization and demodulation verified
+
+### Experiment
+
+Extended real-world FM validation using a wideband Mumbai broadcast-FM IQ capture:
+
+- center frequency: 92.3 MHz
+- sample rate: 10 MS/s
+- file size: approximately 880 MB
+- duration: approximately 11 seconds
+- format: complex64
+- capture contained multiple broadcast-FM stations
+
+The external IQ recording remains under `data/external/` and is not committed to Git.
+
+### Wideband analysis
+
+A wideband PSD covering approximately 87.3–97.3 MHz showed multiple distinct FM broadcast stations.
+
+A strong station around 92.7 MHz was selected for further processing.
+
+### Channelization
+
+The selected station was approximately +400 kHz relative to the 92.3 MHz recording center.
+
+Processing performed:
+
+`wideband IQ`
+→ complex-IQ DC removal
+→ frequency translation by approximately -400 kHz
+→ target station centered near 0 Hz
+→ anti-alias filtering and 40× decimation
+→ 10 MS/s reduced to 250 kS/s
+
+The resulting PSD confirmed that the selected FM channel remained while neighboring wideband stations were removed.
+
+### FM demodulation
+
+The isolated channel was processed using the production:
+
+`fm_demodulate()`
+
+The demodulated multiplex spectrum showed structure consistent with broadcast FM:
+
+- strong 0–15 kHz program audio,
+- clear ~19 kHz stereo pilot,
+- energy in the 23–53 kHz stereo-difference region,
+- a feature near the ~57 kHz RDS region.
+
+No stereo or RDS decoding was performed.
+
+### Audio recovery
+
+Mono-compatible audio was recovered using:
+
+`FM multiplex`
+→ 15 kHz low-pass filtering
+→ demodulated DC removal
+→ 50 µs FM de-emphasis
+→ resampling from 250 kS/s to 50 kS/s
+→ normalization
+→ 16-bit WAV
+
+The complete capture produced approximately 11 seconds of clear, intelligible broadcast audio.
+
+Processing of the large recording was performed in chunks rather than loading the entire capture into expanded complex arrays.
+
+### Result
+
+PASS — IQWAV successfully processed a genuine wideband multi-station OTA capture, selected and channelized one FM station, demodulated it with the production FM discriminator, identified expected multiplex structure, and recovered clear audio.
+
 
 ## 2026-08-30 — FM demodulation productionized and real-data verified
 
