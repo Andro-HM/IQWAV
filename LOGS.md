@@ -16,6 +16,50 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-08-31 — Autocorrelation primitives implemented and verified
+
+### Implementation
+
+Added production correlation utilities:
+
+- `autocorrelation(samples, max_lag=None)`
+- `normalized_autocorrelation(samples, max_lag=None)`
+
+Location:
+
+`src/iqwav/correlation/autocorrelation.py`
+
+The implementation supports real and complex 1-D signals and computes non-negative-lag autocorrelation using:
+
+`R[k] = (1/(N-k)) Σ x[n+k] conj(x[n])`
+
+Overlap normalization prevents artificial decay at larger lags.
+
+Normalized autocorrelation divides by `R[0]`, giving unity at lag 0.
+
+### Validation
+
+Automated tests:
+
+- 30 focused autocorrelation tests passed
+- 309 total project tests passed
+
+Manual notebook verification was added in:
+
+`notebooks/learning/04_correlation_and_blind_estimation.ipynb`
+
+Verified:
+
+- period-3 sequence produced peaks at lags 0, 3, 6, 9, ...
+- complex IQ tone preserved unit correlation magnitude and showed the expected phase progression
+- lag-1 correlation phase matched `2πf/Fs`
+- white noise showed approximately zero non-zero-lag correlation
+
+### Result
+
+PASS — IQWAV now has verified real/complex autocorrelation primitives suitable for later periodicity analysis, blind parameter estimation, synchronization, framing, and bitstream analysis.
+
+
 ## 2026-08-30 — Wideband OTA FM channelization and demodulation verified
 
 ### Experiment
