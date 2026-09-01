@@ -16,6 +16,122 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-01 — Coarse PSK frequency-offset estimation implemented and verified
+
+### Implementation
+
+Added production coarse frequency-offset estimation:
+
+- `FrequencyOffsetEstimate`
+- `estimate_frequency_offset(samples, fs, *, min_coherence=0.05)`
+
+Location:
+
+`src/iqwav/estimation/frequency_offset.py`
+
+The estimator uses lag-1 complex autocorrelation:
+
+`R[1] = mean(x[n+1] * conj(x[n]))`
+
+For an oversampled PSK-like signal with constant frequency offset:
+
+`angle(R[1]) ≈ 2π Δf / Fs`
+
+therefore:
+
+`Δf ≈ Fs * angle(R[1]) / (2π)`
+
+A coherence measure:
+
+`|R[1]| / R[0]`
+
+is used to reject unreliable low-correlation inputs.
+
+### Automated validation
+
+Focused frequency-offset tests:
+
+- 30 passed
+
+Full project suite:
+
+- 432 passed
+
+Clean BPSK offsets from approximately -5 kHz to +5 kHz were recovered with very small error.
+
+QPSK positive and negative offsets were also recovered successfully.
+
+The estimator remained stable under:
+
+- constant phase rotation
+- amplitude scaling
+- waveform cropping
+- 20 dB AWGN
+- 10 dB AWGN
+
+### Manual notebook verification
+
+Continued:
+
+`notebooks/learning/04_correlation_and_blind_estimation.ipynb`
+
+A QPSK waveform was given a known:
+
+- Fs = 80 kS/s
+- SPS = 8
+- true CFO = +1000 Hz
+
+A short record produced:
+
+- estimated CFO ≈ 1051.86 Hz
+- phase increment ≈ 0.08261 rad/sample
+- coherence ≈ 0.875
+
+A fixed phase rotation of 1.7 rad changed the estimate only by floating-point noise, confirming that constant phase cancels in adjacent-sample correlation.
+
+At 10 dB AWGN:
+
+- estimated CFO ≈ 1051.96 Hz
+- coherence decreased to approximately 0.797
+
+The similar clean/noisy estimates showed that the dominant short-record error was not AWGN but finite QPSK symbol-boundary averaging.
+
+Using a much longer QPSK record reduced the error substantially:
+
+- true CFO = 1000 Hz
+- estimated CFO ≈ 1003.55 Hz
+- error ≈ +3.55 Hz
+- coherence ≈ 0.874
+
+This confirmed that random QPSK boundary-phase contributions average out as more observations are available.
+
+### Limitations
+
+This remains a coarse estimator rather than carrier synchronization.
+
+Current assumptions:
+
+- complex IQ input
+- known sample rate
+- oversampled PSK-like waveform
+- rectangular/sample-and-hold pulse structure
+- constant frequency offset
+- moderate SNR
+- sufficient observation length
+
+Not yet handled:
+
+- CFO correction
+- carrier tracking
+- timing recovery
+- pulse-shaped arbitrary signals
+- one-sample-per-symbol random PSK
+- ambiguity resolution outside the principal lag-1 phase range
+
+### Result
+
+PASS — IQWAV can now estimate coarse carrier-frequency offset from supported oversampled complex PSK signals using complex autocorrelation, with reliability indicated by lag-1 coherence.
+
 
 ## 2026-09-01 — Blind rectangular-PSK symbol-rate estimation implemented and verified
 
