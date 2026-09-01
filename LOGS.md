@@ -16,6 +16,102 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-01 — Blind occupied-band detection implemented and verified on real OTA IQ
+
+### Implementation
+
+Added production blind spectral occupancy detection:
+
+- `OccupiedBand`
+- `detect_occupied_bands(samples, fs, *, nperseg=None, threshold_db=6.0, min_bins=3)`
+
+Location:
+
+`src/iqwav/estimation/occupied_band.py`
+
+The baseline detector:
+
+`IQ samples`
+→ Welch PSD
+→ PSD in dB
+→ median spectral noise-floor estimate
+→ threshold above noise floor
+→ contiguous occupied-bin grouping
+→ minimum-width filtering
+→ occupied-band parameter extraction
+
+For each detected region it reports:
+
+- lower frequency
+- upper frequency
+- center frequency
+- bandwidth
+- spectral peak frequency
+- peak PSD
+- peak margin above estimated noise floor
+
+Frequencies are relative to the capture center. Absolute RF frequency is only obtained when external recording-center metadata is available.
+
+### Automated validation
+
+Focused occupied-band tests:
+
+- 34 passed
+
+Full project test suite:
+
+- 343 passed
+
+Synthetic validation recovered a deliberately hidden approximately 60 kHz-wide signal centered at +100 kHz:
+
+- estimated lower edge ≈ 69.70 kHz
+- estimated upper edge ≈ 130.25 kHz
+- estimated center ≈ 99.98 kHz
+- estimated bandwidth ≈ 60.55 kHz
+
+A pure complex white-noise test returned no occupied regions.
+
+### Real OTA validation
+
+Created:
+
+`notebooks/experiments/03_blind_occupied_band_real_iq.ipynb`
+
+The detector was applied to a 0.2-second chunk of the previously validated Mumbai wideband FM capture:
+
+- sample rate: 10 MS/s
+- recording center: 92.3 MHz
+- detector was NOT supplied station locations, bandwidths, or number of stations
+
+Estimated noise floor:
+
+- approximately -118.66 dB
+
+Major automatically detected RF centers included:
+
+- approximately 91.114 MHz
+- approximately 91.898 MHz
+- approximately 92.701 MHz
+- approximately 93.482 MHz
+
+These correspond closely to major spectral regions previously observed manually in the real capture.
+
+A narrow additional approximately 3.7 kHz region near 92.796 MHz was also returned. Inspection showed a below-threshold gap separating it from the nearby large 92.7 MHz occupied region. The current baseline intentionally performs no gap bridging or physical-channel merging, so the regions remain separate.
+
+### Limitations observed
+
+- median noise-floor estimation assumes less than roughly half of the analyzed spectrum is strongly occupied
+- no gap bridging or occupied-region merging
+- no RF-center inference from raw IQ
+- no SNR estimate yet
+- a threshold-fragmented physical channel may appear as multiple occupied regions
+- a detected narrow region is not automatically classified as a real communication channel
+
+### Result
+
+PASS — IQWAV can now automatically discover and measure occupied spectral regions in both controlled synthetic data and genuine wideband OTA IQ without being told where the signals are located.
+
+
 ## 2026-08-31 — Autocorrelation primitives implemented and verified
 
 ### Implementation
