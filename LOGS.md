@@ -16,6 +16,122 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+
+## 2026-09-01 — Blind rectangular-PSK symbol-rate estimation implemented and verified
+
+### Implementation
+
+Added production symbol-rate estimation:
+
+- `SymbolRateEstimate`
+- `estimate_symbol_rate(samples, fs, *, min_sps=2, max_sps=64, min_score=0.10)`
+
+Location:
+
+`src/iqwav/estimation/symbol_rate.py`
+
+The baseline estimator targets rectangular-pulse BPSK/QPSK-like waveforms with integer samples per symbol.
+
+Processing:
+
+`waveform`
+→ adjacent transition energy `|x[n+1] - x[n]|²`
+→ transition-energy mean removal
+→ normalized autocorrelation
+→ search for recurring symbol-boundary periodicity
+→ select smallest reliable local autocorrelation peak
+→ estimate samples per symbol
+→ compute symbol rate as `Fs / SPS`
+
+The smallest qualifying peak is selected because harmonics at `2*SPS`, `3*SPS`, etc. can also have strong autocorrelation.
+
+### Automated validation
+
+Focused symbol-rate tests:
+
+- 37 passed
+
+Full project test suite:
+
+- 402 passed
+
+Verified BPSK and QPSK recovery at:
+
+- SPS = 4
+- SPS = 8
+- SPS = 16
+
+For `Fs = 80 kS/s` and `SPS = 8`:
+
+- estimated SPS = 8
+- estimated symbol rate = 10,000 baud
+
+The estimator also remained correct under:
+
+- constant phase rotation
+- amplitude scaling
+- cropped/start-offset waveforms
+- 20 dB AWGN
+- 10 dB AWGN
+
+### Manual notebook verification
+
+Continued:
+
+`notebooks/learning/04_correlation_and_blind_estimation.ipynb`
+
+A synthetic BPSK waveform with hidden `SPS = 8` showed autocorrelation peaks at approximately:
+
+- lag 8
+- lag 16
+- lag 24
+- lag 32
+
+The estimator correctly selected the fundamental lag:
+
+- true SPS: 8
+- estimated SPS: 8
+- true rate: 10,000 baud
+- estimated rate: 10,000 baud
+- score: approximately 0.460
+
+A QPSK waveform with 10 dB AWGN also returned:
+
+- estimated SPS: 8
+- estimated rate: 10,000 baud
+- score: approximately 0.538
+
+### Limitations
+
+This is not yet general blind baud estimation.
+
+Current assumptions include:
+
+- rectangular/sample-and-hold pulse structure
+- integer SPS
+- BPSK/QPSK-like symbols
+- sufficiently many symbol transitions
+- moderate SNR
+- known sampling rate
+
+Not yet handled:
+
+- RRC or other pulse shaping
+- fractional SPS
+- timing drift
+- severe CFO
+- matched filtering
+- carrier recovery
+- timing synchronization
+- arbitrary modulation
+
+If the true SPS is excluded from the search range but a harmonic remains inside it, a harmonic may be returned.
+
+### Result
+
+PASS — IQWAV can now infer symbol spacing and baud rate for supported rectangular-pulse PSK waveforms without being given samples-per-symbol explicitly.
+
+
 ## 2026-09-01 — Blind in-band SNR estimation implemented and verified
 
 ### Implementation
