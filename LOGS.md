@@ -16,6 +16,101 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-01 — Blind in-band SNR estimation implemented and verified
+
+### Implementation
+
+Added production spectral SNR estimation:
+
+- `SNREstimate`
+- `estimate_band_snr(samples, fs, band, *, nperseg=None)`
+
+Location:
+
+`src/iqwav/estimation/band_snr.py`
+
+The estimator operates on an `OccupiedBand` and computes:
+
+`IQ samples`
+→ Welch PSD
+→ target-band bins
+→ median linear PSD outside target band
+→ estimated in-band noise power
+→ total in-band power
+→ noise subtraction
+→ signal power
+→ SNR in dB
+
+Definition:
+
+`SNR = estimated in-band signal power / estimated in-band noise power`
+
+This is not Eb/N0, Es/N0, CNR, BER, or receiver noise figure.
+
+### Automated validation
+
+Focused SNR tests:
+
+- 22 passed
+
+Full project test suite:
+
+- 365 passed
+
+Synthetic tests produced:
+
+- designed 0 dB → approximately 0.30 dB
+- designed 5 dB → approximately 5.13 dB
+- designed 10 dB → approximately 10.07 dB
+- designed 20 dB → approximately 20.06 dB
+
+Additional tests verified expected changes with signal amplitude, noise amplitude, frequency translation, real input, marginal/no-signal cases, and composition with `detect_occupied_bands`.
+
+### Manual synthetic verification
+
+A synthetic approximately 60 kHz occupied band with a designed in-band SNR of 10 dB was processed using:
+
+`detect_occupied_bands()`
+→ `estimate_band_snr()`
+
+Result:
+
+- target SNR: 10 dB
+- estimated SNR: approximately 10.05 dB
+- estimated signal power: approximately 1.003
+- estimated noise power: approximately 0.099
+- total in-band power: approximately 1.102
+
+Result matched the designed SNR closely.
+
+### Real OTA validation
+
+The estimator was applied to the occupied regions previously discovered automatically in the Mumbai 10 MS/s OTA capture.
+
+Estimated values:
+
+- 91.114 MHz, BW ≈ 69.6 kHz → SNR ≈ 7.86 dB
+- 91.898 MHz, BW ≈ 161.1 kHz → SNR ≈ 19.12 dB
+- 92.701 MHz, BW ≈ 173.3 kHz → SNR ≈ 18.17 dB
+- 92.796 MHz, BW ≈ 3.7 kHz → SNR ≈ 6.36 dB
+- 93.482 MHz, BW ≈ 97.0 kHz → SNR ≈ 15.59 dB
+
+The narrow approximately 92.796 MHz region remains a detector fragment/candidate rather than a confirmed physical communication channel.
+
+### Limitations
+
+- assumes approximately broadband and locally stationary background noise
+- estimates noise from out-of-band PSD bins
+- sufficiently crowded spectra may bias the noise estimate
+- depends on the correctness of the supplied `OccupiedBand`
+- does not estimate Eb/N0, Es/N0, BER, or modulation quality
+- does not determine whether an occupied region represents a genuine communication channel
+
+### Result
+
+PASS — IQWAV can now automatically discover occupied regions in real IQ data and estimate their in-band signal-to-noise ratio without access to a clean reference signal.
+
+
 ## 2026-09-01 — Blind occupied-band detection implemented and verified on real OTA IQ
 
 ### Implementation
