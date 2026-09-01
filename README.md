@@ -29,6 +29,32 @@ Because captures may originate from different sensors, locations and acquisition
 
 The required system should automate and improve this analysis.
 
+The target system eventually needs to move from:
+
+```text
+known signal + known parameters
+        ↓
+process correctly
+```
+
+toward:
+
+```text
+unknown or partially known IQ / WAV
+        ↓
+discover useful signal parameters
+        ↓
+synchronize
+        ↓
+identify modulation
+        ↓
+demodulate
+        ↓
+recover bits
+        ↓
+de-interleave / FEC / frame / payload analysis
+```
+
 ---
 
 ## 3. Target Capabilities
@@ -59,9 +85,9 @@ Target parameters include:
 - FEC,
 - interleaving,
 - signal activity regions,
-- confidence scores.
+- confidence / reliability information.
 
-Not all of these are implemented yet.
+Some of these now have baseline production implementations; others remain future work.
 
 ### 3.3 Signal Visualization
 
@@ -128,13 +154,15 @@ signal visualization
     ↓
 signal/activity detection
     ↓
-spectrum + occupied-bandwidth analysis
+spectrum + occupied-band analysis
     ↓
 parameter estimation
     ↓
-automatic modulation recognition
+channel selection / channelization
     ↓
 carrier / timing synchronization
+    ↓
+automatic modulation recognition
     ↓
 demodulation
     ↓
@@ -167,27 +195,29 @@ Preferred development loop:
 
 ```text
 theory
-→ small experiment
-→ bounded implementation
+→ smallest controlled experiment
+→ bounded production implementation
 → focused tests
 → full regression test
 → deliberate impairment/failure testing
 → manual verification
 → real-data validation where appropriate
-→ integration
 → documentation
+→ commit
 → next topic
 ```
 
 Engineering rules:
 
 1. Reusable production functionality belongs in `src/iqwav/`.
-2. Learning and exploratory work belongs in notebooks.
-3. Synthetic signals with known ground truth should be used before claiming algorithmic correctness.
-4. Real RF captures should be used to expose assumptions and validate integration.
-5. Passing synthetic tests alone must not be treated as proof of real-world performance.
-6. New blind-estimation or receiver functionality should not be assumed until explicitly implemented and tested.
-7. Large recordings and generated outputs should remain outside normal Git history.
+2. Learning notebooks are for small, controlled concept validation.
+3. Experiment notebooks are for realistic multi-stage or real-data work.
+4. Synthetic signals with known ground truth should be used before claiming algorithmic correctness.
+5. Real RF captures should be used to expose assumptions and validate integration.
+6. Passing synthetic tests alone must not be treated as proof of broad real-world performance.
+7. Blind-estimation or receiver functionality must not be claimed beyond its explicitly tested scope.
+8. Large recordings and generated outputs should remain outside normal Git history.
+9. `LOGS.md` is the chronological engineering record; update it only after a milestone is meaningfully verified.
 
 ---
 
@@ -204,17 +234,25 @@ Completed curriculum currently covers:
 - Module 6 — Analog modulation
 - Module 7 — Digital communication fundamentals
 - Module 8 — Digital modulation
+- Module 9 — Correlation and statistical signal analysis
+- Module 10 — Blind parameter estimation
 
-The current implementation boundary should remain grounded in concepts supported by **Modules 0–8** unless the learning state is explicitly updated later.
+The current implementation boundary is therefore **Modules 0–10**.
 
-Do not assume the following have already been learned or implemented merely because directories exist for them:
+The next major learning/implementation phase is:
 
-- correlation/statistical signal analysis,
-- blind parameter estimation,
-- synchronization,
+- Module 11 — Synchronization
+
+Do not assume the following have already been implemented merely because directories exist for them:
+
+- carrier-frequency correction/tracking,
+- phase recovery,
+- timing recovery,
 - AMR,
 - blind FEC,
-- framing/payload recovery.
+- interleaver identification,
+- framing/payload recovery,
+- complete end-to-end automation.
 
 ---
 
@@ -230,73 +268,51 @@ IQWAV/
 ├── pyproject.toml
 │
 ├── configs/
-│
 ├── docs/
-│   ├── architecture/
-│   ├── decisions/
-│   └── research/
-│
 ├── data/
 │   ├── raw/
 │   ├── external/
 │   ├── synthetic/
 │   ├── processed/
 │   └── samples/
-│
 ├── notebooks/
 │   ├── learning/
 │   └── experiments/
-│
 ├── scripts/
-│
-├── src/
-│   └── iqwav/
-│       ├── io/
-│       ├── dsp/
-│       ├── modulation/
-│       ├── estimation/
-│       ├── synchronization/
-│       ├── amr/
-│       ├── demod/
-│       ├── interleaving/
-│       ├── fec/
-│       ├── correlation/
-│       ├── framing/
-│       ├── pipeline/
-│       ├── ui/
-│       └── utils/
-│
+├── src/iqwav/
+│   ├── io/
+│   ├── dsp/
+│   ├── modulation/
+│   ├── estimation/
+│   ├── synchronization/
+│   ├── amr/
+│   ├── demod/
+│   ├── interleaving/
+│   ├── fec/
+│   ├── correlation/
+│   ├── framing/
+│   ├── pipeline/
+│   ├── ui/
+│   └── utils/
 ├── tests/
 │   ├── unit/
 │   ├── integration/
 │   └── fixtures/
-│
 ├── models/
-│   ├── checkpoints/
-│   └── metadata/
-│
 ├── outputs/
-│   ├── plots/
-│   ├── reports/
-│   └── runs/
-│
-├── native/
-│   └── cpp/
-│
+├── native/cpp/
 └── gnuradio/
 ```
 
-### `src/iqwav/io/`
+### Current production packages
 
-Current responsibilities:
+`src/iqwav/io/`
 
 - WAV loading,
 - explicit WAV I/Q conversion,
 - raw interleaved IQ loading.
 
-### `src/iqwav/dsp/`
-
-Current functionality:
+`src/iqwav/dsp/`
 
 - FFT magnitude spectrum,
 - periodogram PSD,
@@ -307,9 +323,7 @@ Current functionality:
 - AWGN injection,
 - controlled phase/frequency impairment injection.
 
-### `src/iqwav/modulation/`
-
-Current functionality:
+`src/iqwav/modulation/`
 
 - real tones,
 - complex IQ tones,
@@ -317,211 +331,102 @@ Current functionality:
 - QPSK Gray mapping,
 - rectangular sampled baseband waveforms.
 
-### `src/iqwav/demod/`
-
-Current functionality:
+`src/iqwav/demod/`
 
 - known-timing hard-decision BPSK demodulation,
 - known-timing hard-decision QPSK demodulation,
 - FM phase-discriminator demodulation.
 
-### `src/iqwav/estimation/`
+`src/iqwav/correlation/`
 
-Reserved for future blind or semi-blind estimation such as:
+- `autocorrelation(...)`
+- `normalized_autocorrelation(...)`
 
-- occupied bandwidth,
-- carrier/CFO,
-- SNR/noise floor,
-- baud/symbol rate.
+`src/iqwav/estimation/`
 
-### `src/iqwav/synchronization/`
+- `OccupiedBand`
+- `detect_occupied_bands(...)`
+- `SNREstimate`
+- `estimate_band_snr(...)`
+- `SymbolRateEstimate`
+- `estimate_symbol_rate(...)`
+- `FrequencyOffsetEstimate`
+- `estimate_frequency_offset(...)`
 
-Reserved for future carrier and symbol synchronization.
+These are baseline blind/semi-blind estimators with explicitly limited scopes. They are not yet a universal unknown-signal-analysis engine.
 
-### `src/iqwav/amr/`
+`src/iqwav/synchronization/` is reserved for the next phase: CFO correction, carrier/phase recovery and symbol timing recovery.
 
-Reserved for Automatic Modulation Recognition.
-
-### `src/iqwav/interleaving/`
-
-Reserved for interleaver/de-interleaver functionality.
-
-### `src/iqwav/fec/`
-
-Reserved for FEC identification/decoding.
-
-### `src/iqwav/correlation/`
-
-Reserved for signal/bitstream correlation.
-
-### `src/iqwav/framing/`
-
-Reserved for frame, synchronization-word, header and payload recovery.
-
-### `src/iqwav/pipeline/`
-
-Reserved for the eventual end-to-end processing pipeline.
-
-### `src/iqwav/ui/`
-
-Reserved for GUI functionality.
+`src/iqwav/amr/`, `interleaving/`, `fec/`, `framing/`, `pipeline/` and `ui/` remain future subsystems.
 
 ---
 
-## 8. Data and Supporting Directories
+## 8. Data and Notebooks
 
-### `data/raw/`
+Large RF recordings remain local under `data/` and are excluded from normal Git history.
 
-Local original recordings. Large captures should not normally be committed.
+### Learning notebooks
 
-### `data/external/`
-
-Externally obtained recordings and datasets. Current real OTA validation data is stored here locally and excluded from Git.
-
-### `data/synthetic/`
-
-Generated signals used for experiments and validation.
-
-### `data/processed/`
-
-Intermediate/generated datasets.
-
-### `data/samples/`
-
-Very small Git-safe samples useful for tests or demonstrations.
-
-### `notebooks/learning/`
-
-Current learning notebooks:
+Current:
 
 - `01_tone_generation.ipynb`
 - `02_digital_communication.ipynb`
 - `03_file_io_and_signal_analysis.ipynb`
+- `04_correlation_and_blind_estimation.ipynb`
 
-### `notebooks/experiments/`
+Learning notebooks are for the smallest controlled validation of newly added functions, usually against synthetic known ground truth.
 
-Current formal experiments:
+### Experiment notebooks
+
+Current:
 
 - `01_real_iq_smoke_test.ipynb`
 - `02_real_fm_demodulation.ipynb`
+- `03_blind_occupied_band_real_iq.ipynb`
 
-### `tests/unit/`
-
-Focused tests for individual production functions/modules.
-
-### `tests/integration/`
-
-Tests involving multiple components.
-
-### `tests/fixtures/`
-
-Small deterministic known-ground-truth test inputs.
-
-### `docs/architecture/`, `docs/research/`, `docs/decisions/`
-
-Architecture, research notes and engineering decisions.
-
-### `outputs/`
-
-Generated plots, reports, run artifacts and temporary outputs.
-
-### `models/`
-
-Future model metadata/checkpoints if learning-based components are introduced.
-
-### `native/cpp/`
-
-Future C++ components if performance/integration requires them.
-
-### `gnuradio/`
-
-GNU Radio flowgraphs and experiments.
+Experiment notebooks are for real-data or multi-stage system validation.
 
 ---
 
 ## 9. Current Production Functionality
 
-### 9.1 Synthetic Tone Generation
+### 9.1 Synthetic Signals
 
 Implemented:
 
 - `generate_real_tone(...)`
 - `generate_iq_tone(...)`
+- BPSK/QPSK mapping,
+- rectangular waveform generation.
 
-Supports deterministic real and complex-IQ tones with amplitude/phase control and validation.
-
-### 9.2 Spectrum and PSD
+### 9.2 Spectrum / PSD / Waterfall
 
 Implemented:
 
 - `magnitude_spectrum(...)`
 - `periodogram_psd(...)`
 - `welch_psd(...)`
-
-Supports real/complex 1-D input, centered two-sided frequency axes and signed complex-IQ frequency analysis.
-
-### 9.3 Spectrogram / Waterfall
-
-Implemented:
-
 - `spectrogram_data(...)`
 
-Returns time, centered frequency and linear time-frequency power suitable for plotting and future GUI use.
-
-### 9.4 FIR Filtering
+### 9.3 Filtering / Power / Noise
 
 Implemented:
 
-- `design_lowpass_fir(...)`
-- `design_highpass_fir(...)`
-- `design_bandpass_fir(...)`
-- `apply_fir_filter(...)`
+- low/high/band-pass FIR design,
+- FIR application,
+- `signal_power(...)`,
+- `add_awgn(...)`.
 
-Supports basic FIR filtering for real and complex signals.
-
-### 9.5 Signal Power and AWGN
+### 9.4 Controlled IQ Impairments
 
 Implemented:
 
-- `signal_power(...)`
-- `add_awgn(...)`
+- `apply_frequency_offset(...)`
+- `apply_phase_offset(...)`
 
-Supports average power measurement, real Gaussian noise, circular complex Gaussian noise and seeded reproducibility.
+These inject known impairments; they do not correct unknown impairments.
 
-### 9.6 Controlled IQ Impairments
-
-Implemented:
-
-- frequency-offset injection,
-- phase-offset injection.
-
-These utilities inject known impairments for controlled experiments. They do not estimate or correct unknown impairments.
-
-### 9.7 BPSK / QPSK Modulation
-
-Implemented:
-
-- BPSK mapping,
-- Gray-coded QPSK mapping,
-- rectangular sampled waveform generation.
-
-BPSK:
-
-```text
-0 → +1
-1 → -1
-```
-
-QPSK Gray mapping:
-
-```text
-00 → (+1,+1)/√2
-01 → (-1,+1)/√2
-11 → (-1,-1)/√2
-10 → (+1,-1)/√2
-```
-
-### 9.8 Known-Timing BPSK / QPSK Demodulation
+### 9.5 Known-Timing Digital Demodulation
 
 Implemented:
 
@@ -530,16 +435,13 @@ Implemented:
 
 Current assumptions:
 
-- symbol boundaries are known,
-- samples-per-symbol is supplied,
+- symbol boundaries known,
+- samples-per-symbol supplied,
 - no timing recovery,
 - no carrier recovery,
-- no CFO correction,
-- no phase correction.
+- no CFO/phase correction.
 
-These are controlled hard-decision receivers, not blind receivers.
-
-### 9.9 WAV and Raw IQ Ingestion
+### 9.6 WAV and Raw IQ Ingestion
 
 Implemented:
 
@@ -547,48 +449,176 @@ Implemented:
 - `load_wav_iq(path, i_channel=0, q_channel=1)`
 - `load_raw_iq(path, dtype=np.float32, iq_order="IQ")`
 
-Raw IQ ingestion deliberately does not infer:
+Raw IQ ingestion deliberately does not infer datatype, endianness, I/Q ordering, sample rate or center frequency.
 
-- datatype,
-- endianness,
-- I/Q ordering,
-- sample rate,
-- center frequency.
-
-### 9.10 FM Phase-Discriminator Demodulation
+### 9.7 FM Phase-Discriminator Demodulation
 
 Implemented:
 
 - `fm_demodulate(samples)`
 
-The production discriminator computes:
+Core operation:
 
 ```text
 angle(samples[1:] * conj(samples[:-1]))
 ```
 
-and returns adjacent phase increments in **radians/sample**.
+It returns adjacent phase increments in radians/sample. Filtering, DC removal, resampling, de-emphasis and stereo/RDS decoding are intentionally outside this primitive.
 
-It intentionally does not:
+### 9.8 Autocorrelation
 
-- multiply by `Fs/(2π)`,
-- remove DC,
-- low-pass filter,
-- resample,
-- normalize,
-- perform de-emphasis,
-- decode stereo,
-- estimate or correct carrier/CFO.
+Implemented:
 
-Those higher-level steps remain outside the reusable phase discriminator.
+- `autocorrelation(samples, max_lag=None)`
+- `normalized_autocorrelation(samples, max_lag=None)`
+
+Convention:
+
+```text
+R[k] = (1 / (N-k)) Σ x[n+k] conj(x[n])
+```
+
+Validated on periodic real sequences, complex IQ phase progression and white noise.
+
+### 9.9 Blind Spectral Occupied-Band Detection
+
+Implemented:
+
+- `detect_occupied_bands(samples, fs, *, nperseg=None, threshold_db=6.0, min_bins=3)`
+
+Baseline:
+
+```text
+samples
+    ↓
+Welch PSD
+    ↓
+dB conversion
+    ↓
+median background estimate
+    ↓
+threshold
+    ↓
+contiguous occupied bins
+    ↓
+band edges / center / width / peak
+```
+
+The result reports frequencies relative to the capture/baseband center. Current bandwidth is threshold-defined spectral width, not standardized 99%-occupied-power bandwidth.
+
+### 9.10 Blind In-Band SNR Estimation
+
+Implemented:
+
+- `estimate_band_snr(samples, fs, band, *, nperseg=None)`
+
+Returns signal power, noise power, total in-band power, noise PSD and SNR.
+
+Definition:
+
+```text
+SNR = estimated in-band signal power / estimated in-band noise power
+```
+
+This is not Eb/N0, Es/N0, BER, modulation quality or receiver noise figure.
+
+### 9.11 Blind Rectangular-PSK Symbol-Rate Estimation
+
+Implemented:
+
+- `estimate_symbol_rate(samples, fs, *, min_sps=2, max_sps=64, min_score=0.10)`
+
+Baseline:
+
+```text
+waveform
+    ↓
+|x[n+1] - x[n]|²
+    ↓
+mean removal
+    ↓
+normalized autocorrelation
+    ↓
+periodic symbol-boundary peak
+    ↓
+SPS
+    ↓
+symbol rate = Fs / SPS
+```
+
+Validated for rectangular/sample-and-hold BPSK/QPSK-like waveforms with integer SPS, enough transitions, known Fs and moderate SNR.
+
+It is not yet general blind baud estimation for RRC/pulse-shaped/fractional-SPS signals.
+
+### 9.12 Coarse PSK Frequency-Offset Estimation
+
+Implemented:
+
+- `estimate_frequency_offset(samples, fs, *, min_coherence=0.05)`
+
+Baseline:
+
+```text
+R[1] = mean(x[n+1] conj(x[n]))
+angle(R[1]) ≈ 2π Δf / Fs
+Δf ≈ Fs * angle(R[1]) / (2π)
+```
+
+Returns CFO, per-sample phase increment and lag-1 coherence.
+
+Validated for complex, oversampled rectangular BPSK/QPSK-like signals with constant CFO, known Fs and moderate SNR.
+
+This is coarse estimation only; no carrier correction or tracking is performed. Finite QPSK records can show small residual bias because random symbol-boundary terms do not cancel exactly in a finite observation.
 
 ---
 
-## 10. Real-World Validation
+## 10. Known Metadata vs Estimated Parameters
 
-IQWAV has now been tested on genuine over-the-air SDR data, not only synthetic signals.
+### WAV
 
-### 10.1 Validation Capture
+A standard WAV header normally supplies sample rate, channel count and sample encoding/bit depth. It does not reveal modulation, baud, FEC, framing, etc.
+
+### Headerless raw IQ
+
+A raw IQ sequence may not uniquely contain:
+
+- datatype,
+- byte order,
+- IQ/QI ordering,
+- sample rate,
+- absolute RF center frequency.
+
+These currently come from the operator or external metadata.
+
+### Parameters currently estimated under defined conditions
+
+IQWAV production baselines can estimate:
+
+- occupied spectral regions,
+- threshold-defined bandwidth,
+- relative spectral center,
+- spectral noise floor,
+- in-band SNR,
+- rectangular-PSK symbol rate / integer SPS,
+- coarse PSK CFO.
+
+Absolute RF frequency requires recording-center metadata:
+
+```text
+absolute RF frequency
+    =
+capture center metadata
+    +
+estimated relative frequency
+```
+
+---
+
+## 11. Real-World Validation
+
+### 11.1 PySDR 4-Second Broadcast-FM Capture
+
+Capture:
 
 ```text
 fm_rds_250k_1Msamples.iq
@@ -596,174 +626,246 @@ fm_rds_250k_1Msamples.iq
 
 Known metadata:
 
-- genuine OTA broadcast-FM recording,
 - center frequency: 99.5 MHz,
 - sample rate: 250 kHz,
-- format: complex64 / interleaved float32 I,Q,
+- complex64 / interleaved float32 I,Q,
 - 1,000,000 complex samples,
-- duration: approximately 4 seconds.
-
-The recording is stored locally under `data/external/` and excluded from Git.
-
-### 10.2 Real-IQ Smoke Test
+- approximately 4 seconds.
 
 Production path exercised:
 
 ```text
-real OTA IQ file
+real OTA IQ
     ↓
 load_raw_iq()
     ↓
-complex IQ samples
+FFT / PSD / spectrogram
     ↓
-magnitude_spectrum()
-    ↓
-welch_psd()
-    ↓
-spectrogram_data()
+fm_demodulate()
 ```
 
-Observed:
+Experiment-level post-processing extracted 0–15 kHz mono-compatible audio, removed DC, resampled 250 kHz → 50 kHz and produced approximately 4 seconds of clean intelligible audio.
 
-- loader output matched direct NumPy complex64 loading,
-- time-domain I/Q was physically plausible,
-- FFT showed broad broadcast-FM occupancy,
-- Welch PSD showed consistent real-world spectral structure,
-- waterfall showed sensible time-frequency behavior,
-- no obvious axis corruption, clipping or file-format mismatch was observed.
+The demodulated FM multiplex showed expected structure including a 19 kHz stereo pilot and a feature near the 57 kHz RDS region. No stereo or RDS decoding is claimed.
 
-### 10.3 Real FM Demodulation
+### 11.2 Mumbai Wideband Broadcast-FM Capture
 
-The same capture was then processed as:
+Capture:
 
 ```text
-real OTA IQ
+mumbai-10s-10M-92.3-8-10-25.iq
+```
+
+Known metadata:
+
+- 10 MS/s,
+- recording center 92.3 MHz,
+- complex64,
+- approximately 880 MB,
+- approximately 11 seconds.
+
+Manual FM experiment:
+
+```text
+10 MS/s wideband IQ
+    ↓
+IQ DC removal
+    ↓
+frequency translation of target near 92.7 MHz
+    ↓
+anti-alias filtering + 40× decimation
+    ↓
+250 kS/s channel
     ↓
 fm_demodulate()
     ↓
-FM multiplex/baseband
+15 kHz mono extraction
     ↓
-experiment-level low-pass filtering
+50 µs de-emphasis
     ↓
-DC removal
-    ↓
-resampling
-    ↓
-WAV output
+50 kHz audio
 ```
 
-The resulting WAV contained approximately **4 seconds of clean, clearly intelligible English broadcast audio**.
+Result: clear, intelligible approximately 11-second broadcast audio.
 
-This is an important integration milestone: IQWAV did not merely visualize a real RF recording; it recovered human-audible information from genuine OTA complex IQ data.
+Frequency translation/channelization and audio post-processing remain experiment-level rather than a reusable production receiver pipeline.
+
+### 11.3 Real Blind Occupied-Band Detection
+
+Experiment:
+
+```text
+notebooks/experiments/03_blind_occupied_band_real_iq.ipynb
+```
+
+On a 0.2-second Mumbai chunk, the detector was given real IQ samples and known sample rate, but not station locations, number of stations or station bandwidths.
+
+Major automatically detected RF centers, after applying known 92.3 MHz capture-center metadata, included approximately:
+
+- 91.114 MHz,
+- 91.898 MHz,
+- 92.701 MHz,
+- 93.482 MHz.
+
+A narrow ~3.7 kHz region near 92.796 MHz was also detected and remains a fragment/candidate rather than a confirmed physical channel.
+
+### 11.4 Real Blind In-Band SNR Estimation
+
+| RF center | Detected BW | Estimated in-band SNR |
+|---:|---:|---:|
+| 91.114 MHz | 69.6 kHz | 7.86 dB |
+| 91.898 MHz | 161.1 kHz | 19.12 dB |
+| 92.701 MHz | 173.3 kHz | 18.17 dB |
+| 92.796 MHz | 3.7 kHz | 6.36 dB |
+| 93.482 MHz | 97.0 kHz | 15.59 dB |
+
+These are baseline spectral estimates, not calibrated receiver measurements.
+
+### 11.5 Current Real-Data Boundary
+
+Real-data validation supports claims that IQWAV can:
+
+- ingest genuine complex IQ,
+- produce sensible spectrum/PSD/waterfall representations,
+- recover FM information and clear audio,
+- work with a wideband multi-station recording,
+- automatically discover occupied spectral regions in real OTA IQ,
+- estimate baseline in-band SNR for those regions.
+
+It does not yet prove real-world blind PSK baud/CFO performance, synchronization, AMR or digital payload recovery.
 
 ---
 
-## 11. Testing Status
+## 12. Testing Status
 
-Current full test suite:
+Current full regression suite:
 
 ```text
-279 tests passing
+432 tests passing
 ```
 
 Coverage includes:
 
 - tone generation,
-- FFT spectrum,
-- periodogram/Welch PSD,
-- spectrogram,
+- FFT / PSD / spectrogram,
 - FIR filtering,
-- signal power,
-- AWGN,
+- signal power / AWGN,
 - IQ impairments,
-- BPSK/QPSK modulation,
-- sampled waveforms,
+- BPSK/QPSK modulation and waveforms,
 - known-timing BPSK/QPSK demodulation,
 - WAV/raw-IQ ingestion,
-- FM phase-discriminator demodulation.
+- FM demodulation,
+- autocorrelation,
+- occupied-band detection,
+- in-band SNR estimation,
+- rectangular-PSK symbol-rate estimation,
+- coarse PSK CFO estimation.
 
-FM-specific tests cover:
+Recent focused milestones:
 
-- output shape,
-- float64 output,
-- positive and negative phase increments,
-- wrapped phase differences,
-- amplitude invariance,
-- invalid real input,
-- multidimensional input,
-- insufficient samples,
-- NaN/Inf rejection.
+- autocorrelation: 30 tests,
+- occupied-band detection: 34 tests,
+- band SNR estimation: 22 tests,
+- symbol-rate estimation: 37 tests,
+- frequency-offset estimation: 30 tests.
 
-A passing suite does not imply that unimplemented blind receiver stages exist.
+Passing tests demonstrate correctness only within the tested assumptions.
 
 ---
 
-## 12. What IQWAV Can Do Today
-
-### 12.1 File-to-DSP Analysis
+## 13. What IQWAV Can Do Today
 
 ```text
 known-format WAV / raw IQ
     ↓
 file ingestion
     ↓
-real or complex NumPy samples
-    ↓
 FFT / PSD / spectrogram
     ↓
-basic filtering / power analysis
+filtering / power analysis
 ```
 
-### 12.2 Controlled Digital Communication
+Controlled digital path:
 
 ```text
 bits
     ↓
-BPSK / QPSK mapping
+BPSK / QPSK
     ↓
-rectangular sampled waveform
+rectangular waveform
     ↓
-controlled AWGN / CFO / phase impairment
+AWGN / CFO / phase impairments
     ↓
-known-timing hard-decision demodulation
+known-timing demodulation
     ↓
-recovered bits
+bits
 ```
 
-### 12.3 Real OTA Analog-FM Validation
+First blind/semi-blind parameter path:
 
 ```text
-real OTA complex IQ
+samples + known Fs
     ↓
-raw IQ ingestion
+occupied-band detection
     ↓
-spectral analysis
+relative center / width / noise floor
     ↓
-FM phase discrimination
+in-band SNR
+```
+
+Supported rectangular oversampled PSK path:
+
+```text
+samples + known Fs
     ↓
-experiment-level audio filtering/resampling
+symbol-rate / SPS estimate
     ↓
-clean recovered audio
+coarse CFO estimate
+```
+
+Real OTA path demonstrated:
+
+```text
+real wideband IQ
+    ↓
+blind occupied-band detection
+    ↓
+baseline per-band SNR
+```
+
+and separately:
+
+```text
+real FM IQ
+    ↓
+experiment-level channelization
+    ↓
+fm_demodulate()
+    ↓
+clear recovered audio
 ```
 
 ---
 
-## 13. What IQWAV Does NOT Yet Do
+## 14. What IQWAV Does NOT Yet Do
 
-Do not claim these as current capabilities:
+Do not claim:
 
 - blind raw-IQ datatype inference,
 - blind endianness inference,
 - blind IQ/QI ordering inference,
-- automatic sampling-rate inference from arbitrary headerless data,
-- automatic occupied-bandwidth estimation,
-- carrier/CFO estimation,
+- automatic sampling-rate inference from arbitrary headerless raw IQ,
+- automatic absolute RF-center inference from headerless raw IQ,
+- standardized occupied-power bandwidth measurement,
+- robust physical-channel merging / gap bridging,
+- universal blind SNR estimation in arbitrary crowded/nonstationary spectra,
+- general blind baud estimation for arbitrary pulse shaping/modulation,
+- universal CFO estimation for arbitrary modulations,
 - CFO correction,
-- SNR estimation,
-- noise-floor estimation,
-- blind baud/symbol-rate estimation,
+- carrier tracking,
+- phase recovery,
 - symbol timing recovery,
-- carrier recovery,
+- matched filtering / RRC receiver chain,
 - automatic modulation recognition,
 - FSK demodulation,
 - general QAM demodulation,
@@ -775,51 +877,76 @@ Do not claim these as current capabilities:
 - LDPC decoding,
 - blind framing,
 - header/payload recovery,
-- complete end-to-end analysis pipeline,
+- complete end-to-end unknown-signal pipeline,
 - production GUI.
-
-Directories for future subsystems are placeholders until actual functionality is implemented.
 
 ---
 
-## 14. Source Code vs Notebooks
+## 15. Current Estimator Scope
 
-Production functionality belongs in:
+### Occupied-band detector
 
-```text
-src/iqwav/
-```
+Current limits:
 
-Notebooks are for:
+- median floor assumes strong occupancy does not dominate most of the spectrum,
+- no gap bridging,
+- no physical-channel classification,
+- threshold-defined width.
 
-- learning,
-- visualization,
-- experimentation,
-- algorithm prototyping,
-- integration checks,
-- real-data validation.
+### Band SNR estimator
 
-Once an algorithm is accepted and reusable, its core logic should move into `src/iqwav/`.
+Current limits:
+
+- requires a target band,
+- assumes approximately broadband/stationary noise,
+- crowded spectra can bias the out-of-band noise reference.
+
+### Symbol-rate estimator
+
+Current limits:
+
+- rectangular BPSK/QPSK-like signals,
+- integer SPS,
+- no RRC/general pulse shaping,
+- no fractional SPS,
+- a harmonic can be selected if the true SPS is excluded from the search range.
+
+### Frequency-offset estimator
+
+Current limits:
+
+- complex oversampled rectangular PSK-like input,
+- constant CFO,
+- coarse estimate only,
+- no correction/tracking,
+- principal-angle ambiguity,
+- finite-record QPSK bias possible.
+
+---
+
+## 16. Source Code vs Notebooks
+
+Production functionality belongs in `src/iqwav/`.
+
+Learning notebooks are for:
+
+- smallest controlled validation,
+- synthetic ground truth,
+- understanding one new function/concept,
+- immediate manual verification.
+
+Experiment notebooks are for:
+
+- real data,
+- multi-stage processing,
+- receiver chains,
+- integration and realistic failure analysis.
 
 A notebook must not become the final application architecture.
 
 ---
 
-## 15. Testing and Validation Principles
-
-Whenever practical, algorithms should first be tested against known ground truth.
-
-Possible known properties:
-
-- sample rate,
-- carrier frequency,
-- modulation,
-- SNR,
-- symbol rate,
-- CFO,
-- phase offset,
-- transmitted symbols,
-- transmitted bits.
+## 17. Testing and Validation Principles
 
 Validation ladder:
 
@@ -830,31 +957,26 @@ unit test
     ↓
 controlled impairment test
     ↓
+manual learning-notebook verification
+    ↓
 integration test
     ↓
-real recording
+real recording where applicable
     ↓
 failure analysis
 ```
 
-For future blind estimators, numerical estimates should be compared against ground truth rather than judged only by visual plausibility.
+Numerical estimators should be compared against ground truth rather than judged only visually.
 
 Real-world validation should be repeated across multiple recordings before broad performance claims are made.
 
 ---
 
-## 16. Data Policy
+## 18. Data Policy
 
 Do not commit large IQ/WAV recordings directly to normal Git.
 
-Large items such as:
-
-- raw RF captures,
-- external datasets,
-- generated experiment outputs,
-- ML checkpoints,
-
-should normally remain outside Git or use an appropriate external storage mechanism.
+Large raw RF captures, external datasets, generated outputs and model checkpoints should normally remain outside Git.
 
 Current `.gitignore` policy excludes normal contents of:
 
@@ -862,37 +984,39 @@ Current `.gitignore` policy excludes normal contents of:
 - `data/external/`,
 - `data/processed/`,
 - `data/synthetic/`,
-- generated output directories,
+- generated outputs,
 - model checkpoints.
 
-Small deterministic test fixtures may be committed when useful.
+Small deterministic fixtures may be committed when useful.
+
+Ignored files can still be downloaded or created locally by collaborators; `.gitignore` only controls Git tracking.
 
 ---
 
-## 17. AI / Contributor Handoff Protocol
+## 19. AI / Contributor Handoff Protocol
 
 Before modifying the repository:
 
 1. Read `README.md`.
 2. Read the newest entries in `LOGS.md`.
-3. Inspect relevant source files and tests.
+3. Inspect relevant source and tests.
 4. Determine the current learning/implementation boundary.
 5. Do not assume unfinished functionality exists.
-6. Do not rewrite working architecture without a clear reason.
-7. Keep implementation milestones bounded.
-8. Add focused tests for new production behavior.
-9. Run relevant focused tests first.
-10. Run the full regression suite once after focused tests pass.
-11. Perform manual/notebook verification where it adds value.
-12. Do not update `LOGS.md` until a meaningful milestone is verified.
-13. Preserve compatibility with existing code/tests unless a deliberate change is justified.
-14. Keep large datasets and generated artifacts out of Git.
-
-When proposing major architectural changes, explain why the change is necessary before implementing it.
+6. Keep milestones bounded.
+7. Add focused tests.
+8. Run focused tests first.
+9. Run the full regression suite once after focused tests pass.
+10. Perform manual/notebook verification where useful.
+11. Update `LOGS.md` only after meaningful verification.
+12. Preserve working architecture unless change is justified.
+13. Keep large data/generated artifacts out of Git.
+14. Distinguish metadata from signal-derived estimates.
+15. State assumptions and failure modes explicitly.
+16. Do not turn a baseline result into a universal capability claim.
 
 ---
 
-## 18. Current Development Status
+## 20. Current Development Status
 
 ### Completed foundation
 
@@ -902,51 +1026,75 @@ IQWAV currently has:
 - complex-IQ handling,
 - FFT/PSD/spectrogram analysis,
 - FIR filtering,
-- signal-power measurement,
-- AWGN generation,
+- power and AWGN tools,
 - controlled CFO/phase impairment injection,
 - BPSK/QPSK modulation,
-- sampled rectangular baseband waveforms,
-- known-timing BPSK/QPSK hard demodulation,
+- rectangular sampled digital waveforms,
+- known-timing BPSK/QPSK demodulation,
 - WAV ingestion,
 - stereo-WAV I/Q conversion,
 - known-format raw-IQ ingestion,
-- FM phase-discriminator demodulation.
+- FM phase-discriminator demodulation,
+- autocorrelation primitives,
+- blind occupied-band detection baseline,
+- spectral noise-floor estimation baseline,
+- blind in-band SNR estimation baseline,
+- rectangular-PSK symbol-rate estimation baseline,
+- coarse PSK CFO estimation baseline.
 
 ### Real-data status
 
 IQWAV has successfully:
 
-1. loaded a genuine OTA complex-IQ broadcast-FM capture;
-2. displayed physically sensible FFT, PSD and waterfall representations;
-3. processed that capture through the production FM discriminator;
-4. recovered approximately four seconds of clean intelligible English broadcast audio.
+1. loaded genuine OTA complex-IQ FM data;
+2. produced sensible FFT, PSD and waterfall output;
+3. recovered clean audio from a prepared 250 kS/s FM capture;
+4. processed an approximately 880 MB, 10 MS/s multi-station Mumbai capture;
+5. manually channelized a selected station and recovered approximately 11 seconds of clear audio;
+6. observed expected FM multiplex structure including the 19 kHz stereo pilot;
+7. automatically discovered major occupied regions in the real Mumbai capture;
+8. estimated baseline in-band SNR values for those regions.
 
 ### Automated status
 
 ```text
-279 passed
+432 passed
 ```
 
 ### Current boundary
 
-The current system is a **working DSP and controlled-demodulation foundation**, not yet a blind RF-analysis system.
+The current system is:
 
-Major SIH-specific intelligence layers still to be built later include:
+**working DSP + controlled demodulation + first blind/semi-blind parameter-estimation foundation**
+
+The next major phase is:
 
 ```text
-blind parameter estimation
-→ synchronization
-→ AMR
-→ broader demodulation
-→ de-interleaving
-→ FEC identification/decoding
-→ correlation/framing
-→ payload recovery
-→ integrated GUI
+Module 11 — synchronization
+    ↓
+CFO correction
+    ↓
+carrier / phase recovery
+    ↓
+symbol timing recovery
+    ↓
+synchronized symbols
 ```
 
-For exact chronological development history and the latest engineering notes, see:
+Then:
+
+```text
+Module 12 — AMR
+→ broader automatic demodulation
+→ de-interleaving
+→ FEC identification / decoding
+→ correlation / framing
+→ payload recovery
+→ integrated pipeline
+→ GUI
+```
+
+For exact chronological engineering history, see:
 
 ```text
 LOGS.md
