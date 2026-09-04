@@ -16,6 +16,51 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-04 — Integrated dominant spectral peak estimator from Sayan snapshot
+
+Integrated the dominant spectral-frequency estimation capability from frozen
+Sayan snapshot `9e927de` without merging or cherry-picking Sayan's branch.
+
+Added:
+- `PeakFrequencyEstimate`
+- `estimate_peak_frequency`
+
+Architecture:
+- Added `src/iqwav/estimation/spectral_peak.py`.
+- Reuses HM's existing `magnitude_spectrum` FFT primitive.
+- Complex IQ searches the full signed two-sided spectrum.
+- Real-valued signals search the non-negative spectral half.
+- Optional three-point log-magnitude parabolic interpolation provides a
+  sub-bin peak estimate.
+- Raw FFT resolution remains `fs / N`.
+
+Semantics:
+- This reports the single strongest spectral component in the analyzed block.
+- It is not automatically a carrier-frequency estimate, occupied-band center,
+  CFO estimate, activity detector, bandwidth measurement, or SNR estimate.
+- A wideband modulated signal may have its strongest spectral component away
+  from its actual center frequency.
+
+HM-specific integration improvements:
+- Boolean sample rates are rejected.
+- `refine` must explicitly be boolean.
+- Non-numeric sample arrays are rejected cleanly.
+- Constant/all-zero inputs are rejected.
+
+Files:
+- Added `src/iqwav/estimation/spectral_peak.py`
+- Updated `src/iqwav/estimation/__init__.py`
+- Added `tests/unit/test_spectral_peak.py`
+
+Validation:
+- Focused spectral-peak suite: 24 passed
+- Full suite: 484 passed
+- Previous full suite: 460 passed
+- 24 new tests added
+
+Status:
+Validated on the `integrate-sayan` branch.
+
 
 ## 2026-09-04 — Integrated cross-correlation and correlation peak utilities from Sayan snapshot
 
