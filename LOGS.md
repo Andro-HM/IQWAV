@@ -16,6 +16,219 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-04 — Added rectangular symbol-grid estimator after HM-vs-Sayan benchmark
+
+Completed a controlled head-to-head benchmark of HM's existing symbol-rate
+estimator against Sayan's transition-residue estimator from frozen snapshot
+`9e927de`.
+
+Benchmark:
+- 692 deterministic trials
+- BPSK and QPSK
+- SPS 2, 3, 4, 5, 8, 12, 16, 24, 32
+- clean, phase, amplitude, crop, AWGN, CFO, short-block and pathological cases
+
+Results:
+- HM overall correct: 92.8%
+- Sayan method overall correct: 95.4%
+- HM false-estimate rate: 1.6%
+- Sayan false-estimate rate: 1.7%
+- HM rejection rate: 5.6%
+- Sayan rejection rate: 2.9%
+
+Low-SNR AWGN:
+- 0 dB: HM 22.2% correct, Sayan 77.8%
+- -5 dB: HM 0% correct, Sayan 44.4%
+
+Boundary-phase benchmark:
+- 194 cropped rectangular-waveform trials
+- Sayan boundary offset exact in 194/194 cases
+
+Architecture decision:
+- HM's existing `estimate_symbol_rate()` remains unchanged as an independent,
+  conservative transition-autocorrelation estimator.
+- Sayan's method was not used as a replacement.
+- Its transition-residue method was adapted into a separate bounded symbol-grid
+  estimator.
+
+Added:
+- `RectangularSymbolGridEstimate`
+- `estimate_rectangular_symbol_grid`
+
+File:
+- `src/iqwav/estimation/symbol_grid.py`
+
+The new estimator returns:
+- symbol rate
+- integer samples per symbol
+- block-level symbol-boundary offset
+- quality
+- concentration
+- symbol count
+- effective transition count
+- searched SPS range
+
+Important semantics:
+- `boundary_offset` is a block-level symbol-grid phase estimate, not timing recovery.
+- The estimator assumes rectangular, piecewise-constant symbols with integer SPS.
+- It is not a general pulse-shaped or fractional-SPS blind baud estimator.
+- Sparse/repeating symbol transitions can make only a multiple of the transmitter
+  symbol period observable; if that period lies outside the search range, an
+  in-range divisor may be returned. This is an identifiability limitation.
+
+Validation:
+- New symbol-grid tests: 54 passed
+- Existing HM symbol-rate tests: 37 passed
+- Full suite after integration: 567 passed
+
+
+## 2026-09-04 — Integrated cumulative-power occupied-bandwidth estimator
+
+Integrated and adapted the cumulative-power occupied-bandwidth capability
+from frozen Sayan snapshot `9e927de` without merging or cherry-picking
+Sayan's branch.
+
+Added:
+- `OccupiedBandwidthEstimate`
+- `estimate_occupied_bandwidth`
+
+Architecture:
+- Added `src/iqwav/estimation/occupied_bandwidth.py`.
+- HM's existing `OccupiedBand` and `detect_occupied_bands()` remain unchanged.
+- The new estimator answers a different question: it finds the narrowest
+  frequency interval containing a requested fraction of total measured FFT
+  power.
+
+Definition:
+- FFT-bin power is `abs(FFT[k]) ** 2`.
+- Default-style usage can request, for example, 0.99 of total measured power.
+- Noise, interference, DC, and any other spectral energy all contribute.
+- No noise-floor subtraction or signal-presence decision is performed.
+
+HM-specific improvement:
+- Complex-IQ frequency topology is treated as circular.
+- A minimum-power interval may cross the Nyquist boundary.
+- Wrapped results use `wraps_nyquist=True` and are interpreted as:
+  `[lower_hz, +fs/2) U [-fs/2, upper_hz]`.
+- This avoids falsely reporting nearly full-band widths when signal energy
+  straddles +fs/2 and -fs/2.
+
+Real-valued input:
+- Conjugate-symmetric FFT power is folded onto the non-negative physical
+  frequency axis.
+- DC and Nyquist are counted once.
+- Returned real-signal intervals remain inside `[0, fs/2]`.
+
+Result includes:
+- lower/upper frequency edges
+- circular center frequency
+- bandwidth
+- requested power fraction
+- achieved power fraction
+- Nyquist-wrap flag
+
+Validation:
+- Focused occupied-bandwidth suite: 29 passed
+- Full suite: 513 passed
+- Previous full suite: 484 passed
+- 29 new tests added
+
+Nyquist-wrap validation:
+- fs = 1000 Hz, N = 1000
+- tones at +496 Hz and -494 Hz
+- 99% interval selected as an 11-bin wrapped region
+- bandwidth = 11 Hz rather than an approximately full-band linear interval
+
+Status:
+Validated on the `integrate-sayan` branch.
+
+
+## 2026-09-04 — Integrated dominant spectral peak estimator from Sayan snapshot
+
+Integrated the dominant spectral-frequency estimation capability from frozen
+Sayan snapshot `9e927de` without merging or cherry-picking Sayan's branch.
+
+Added:
+- `PeakFrequencyEstimate`
+- `estimate_peak_frequency`
+
+Architecture:
+- Added `src/iqwav/estimation/spectral_peak.py`.
+- Reuses HM's existing `magnitude_spectrum` FFT primitive.
+- Complex IQ searches the full signed two-sided spectrum.
+- Real-valued signals search the non-negative spectral half.
+- Optional three-point log-magnitude parabolic interpolation provides a
+  sub-bin peak estimate.
+- Raw FFT resolution remains `fs / N`.
+
+Semantics:
+- This reports the single strongest spectral component in the analyzed block.
+- It is not automatically a carrier-frequency estimate, occupied-band center,
+  CFO estimate, activity detector, bandwidth measurement, or SNR estimate.
+- A wideband modulated signal may have its strongest spectral component away
+  from its actual center frequency.
+
+HM-specific integration improvements:
+- Boolean sample rates are rejected.
+- `refine` must explicitly be boolean.
+- Non-numeric sample arrays are rejected cleanly.
+- Constant/all-zero inputs are rejected.
+
+Files:
+- Added `src/iqwav/estimation/spectral_peak.py`
+- Updated `src/iqwav/estimation/__init__.py`
+- Added `tests/unit/test_spectral_peak.py`
+
+Validation:
+- Focused spectral-peak suite: 24 passed
+- Full suite: 484 passed
+- Previous full suite: 460 passed
+- 24 new tests added
+
+Status:
+Validated on the `integrate-sayan` branch.
+
+
+## 2026-09-04 — Integrated cross-correlation and correlation peak utilities from Sayan snapshot
+
+Integrated selected correlation capabilities from frozen Sayan snapshot
+`9e927de` without merging or cherry-picking Sayan's branch.
+
+Added:
+- `cross_correlation`
+- `normalized_cross_correlation`
+- `find_correlation_peaks`
+
+Architecture:
+- HM's existing `autocorrelation` and `normalized_autocorrelation`
+  remain unchanged.
+- Sayan's alternative autocorrelation implementation was intentionally
+  not adopted because its lag/normalization/API semantics differ from
+  HM's production convention used by symbol-rate and CFO estimation.
+- Cross-correlation uses
+  `r_xy[k] = Σ x[n+k] * conj(y[n])`.
+- A delayed first input therefore produces a positive correlation lag.
+- Normalization uses exact overlap energies for each lag.
+- Correlation peak detection operates on magnitude by default and
+  supports complex correlations.
+
+Files:
+- Added `src/iqwav/correlation/cross_correlation.py`
+- Added `src/iqwav/correlation/peaks.py`
+- Updated `src/iqwav/correlation/__init__.py`
+- Added focused unit tests for cross-correlation and peak detection.
+
+Validation:
+- Focused correlation suite: 58 passed
+- Full suite: 460 passed
+- Previous full suite: 432 passed
+- 28 new tests added
+- Existing 30 HM autocorrelation tests remain passing
+
+Status:
+Validated on the `integrate-sayan` branch.
+
+
 ## 2026-09-01 — Coarse PSK frequency-offset estimation implemented and verified
 
 ### Implementation
