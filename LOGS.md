@@ -16,6 +16,67 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-04 — Integrated cumulative-power occupied-bandwidth estimator
+
+Integrated and adapted the cumulative-power occupied-bandwidth capability
+from frozen Sayan snapshot `9e927de` without merging or cherry-picking
+Sayan's branch.
+
+Added:
+- `OccupiedBandwidthEstimate`
+- `estimate_occupied_bandwidth`
+
+Architecture:
+- Added `src/iqwav/estimation/occupied_bandwidth.py`.
+- HM's existing `OccupiedBand` and `detect_occupied_bands()` remain unchanged.
+- The new estimator answers a different question: it finds the narrowest
+  frequency interval containing a requested fraction of total measured FFT
+  power.
+
+Definition:
+- FFT-bin power is `abs(FFT[k]) ** 2`.
+- Default-style usage can request, for example, 0.99 of total measured power.
+- Noise, interference, DC, and any other spectral energy all contribute.
+- No noise-floor subtraction or signal-presence decision is performed.
+
+HM-specific improvement:
+- Complex-IQ frequency topology is treated as circular.
+- A minimum-power interval may cross the Nyquist boundary.
+- Wrapped results use `wraps_nyquist=True` and are interpreted as:
+  `[lower_hz, +fs/2) U [-fs/2, upper_hz]`.
+- This avoids falsely reporting nearly full-band widths when signal energy
+  straddles +fs/2 and -fs/2.
+
+Real-valued input:
+- Conjugate-symmetric FFT power is folded onto the non-negative physical
+  frequency axis.
+- DC and Nyquist are counted once.
+- Returned real-signal intervals remain inside `[0, fs/2]`.
+
+Result includes:
+- lower/upper frequency edges
+- circular center frequency
+- bandwidth
+- requested power fraction
+- achieved power fraction
+- Nyquist-wrap flag
+
+Validation:
+- Focused occupied-bandwidth suite: 29 passed
+- Full suite: 513 passed
+- Previous full suite: 484 passed
+- 29 new tests added
+
+Nyquist-wrap validation:
+- fs = 1000 Hz, N = 1000
+- tones at +496 Hz and -494 Hz
+- 99% interval selected as an 11-bin wrapped region
+- bandwidth = 11 Hz rather than an approximately full-band linear interval
+
+Status:
+Validated on the `integrate-sayan` branch.
+
+
 ## 2026-09-04 — Integrated dominant spectral peak estimator from Sayan snapshot
 
 Integrated the dominant spectral-frequency estimation capability from frozen
