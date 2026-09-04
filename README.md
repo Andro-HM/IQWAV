@@ -341,6 +341,9 @@ IQWAV/
 
 - `autocorrelation(...)`
 - `normalized_autocorrelation(...)`
+- `cross_correlation(...)`
+- `normalized_cross_correlation(...)`
+- `find_correlation_peaks(...)`
 
 `src/iqwav/estimation/`
 
@@ -352,6 +355,12 @@ IQWAV/
 - `estimate_symbol_rate(...)`
 - `FrequencyOffsetEstimate`
 - `estimate_frequency_offset(...)`
+- `PeakFrequencyEstimate`
+- `estimate_peak_frequency(...)`
+- `OccupiedBandwidthEstimate`
+- `estimate_occupied_bandwidth(...)`
+- `RectangularSymbolGridEstimate`
+- `estimate_rectangular_symbol_grid(...)`
 
 These are baseline blind/semi-blind estimators with explicitly limited scopes. They are not yet a universal unknown-signal-analysis engine.
 
@@ -465,20 +474,31 @@ angle(samples[1:] * conj(samples[:-1]))
 
 It returns adjacent phase increments in radians/sample. Filtering, DC removal, resampling, de-emphasis and stereo/RDS decoding are intentionally outside this primitive.
 
-### 9.8 Autocorrelation
+### 9.8 Correlation
 
 Implemented:
 
 - `autocorrelation(samples, max_lag=None)`
 - `normalized_autocorrelation(samples, max_lag=None)`
+- `cross_correlation(first, second)`
+- `normalized_cross_correlation(first, second)`
+- `find_correlation_peaks(correlation, lags, ...)`
 
-Convention:
+Autocorrelation convention:
 
 ```text
 R[k] = (1 / (N-k)) Σ x[n+k] conj(x[n])
 ```
 
 Validated on periodic real sequences, complex IQ phase progression and white noise.
+
+Cross-correlation convention:
+
+```text
+r_xy[lag] = Σ x[n+lag] conj(y[n])
+```
+
+Cross-correlation returns an explicit lag array; a delayed first input peaks at lag `+d`. The normalized variant divides by exact per-lap overlap energies, is bounded by 1 in magnitude, and rejects zero-energy input. `find_correlation_peaks` finds local extrema of the correlation magnitude by default, handles complex correlations through magnitude, and returns peak indices, lags and original values in the caller's explicit lag convention.
 
 ### 9.9 Blind Spectral Occupied-Band Detection
 
@@ -504,7 +524,7 @@ contiguous occupied bins
 band edges / center / width / peak
 ```
 
-The result reports frequencies relative to the capture/baseband center. Current bandwidth is threshold-defined spectral width, not standardized 99%-occupied-power bandwidth.
+The result reports frequencies relative to the capture/baseband center. Its width is threshold-defined spectral width; this is a different quantity from the cumulative-power occupied-bandwidth measurement in 9.14.
 
 ### 9.10 Blind In-Band SNR Estimation
 
@@ -570,6 +590,38 @@ Validated for complex, oversampled rectangular BPSK/QPSK-like signals with const
 
 This is coarse estimation only; no carrier correction or tracking is performed. Finite QPSK records can show small residual bias because random symbol-boundary terms do not cancel exactly in a finite observation.
 
+### 9.13 Dominant Spectral Peak Estimation
+
+Implemented:
+
+- `estimate_peak_frequency(samples, fs, *, refine=True)`
+
+Locates the largest-magnitude FFT bin, optionally refined to sub-bin precision by bounded log-magnitude parabolic interpolation, and reports the dominant spectral component: signed frequency for complex input, non-negative frequency for real input, constant/DC-only input rejected.
+
+This reports the strongest spectral component. It is not automatically the carrier or center frequency of a wideband modulated signal.
+
+### 9.14 Cumulative-Power Occupied-Bandwidth Measurement
+
+Implemented:
+
+- `estimate_occupied_bandwidth(samples, fs, *, power_fraction=0.99)`
+
+Returns the narrowest contiguous FFT-bin interval containing at least `power_fraction` of the total measured spectral power. For complex input the search is cyclic across the Nyquist boundary (a wrapping interval is reported with `wraps_nyquist=True` and `lower_hz > upper_hz`); for real input the conjugate-symmetric spectrum is folded onto the non-negative axis with edges clamped to `[0, fs/2]`.
+
+This is distinct from `detect_occupied_bands` (9.9): the detector is noise-floor/threshold based and may return multiple bands; this measurement always returns exactly one cumulative-power containment interval and does not subtract noise. A 99% result means 99% of total measured FFT power, including noise, DC and interference — not 99% of signal-only power.
+
+### 9.15 Rectangular Symbol-Grid Estimation
+
+Implemented:
+
+- `estimate_rectangular_symbol_grid(samples, fs, *, min_sps=2, max_sps=64, quality_ratio=0.75, min_quality=0.02)`
+
+Groups first-difference magnitudes by `sample_index % P` for each candidate integer period, chance-corrects the strongest residue bin into a quality score, resolves divisor ambiguity by selecting the largest near-best candidate with a divisor-dominance guard, and reports the winning residue class as `boundary_offset`: symbol-start sample indices are congruent to it modulo `samples_per_symbol`.
+
+`boundary_offset` is a block-level symbol-boundary phase estimate, NOT timing recovery.
+
+This estimator and `estimate_symbol_rate` (9.11) are separate production paths: the former is HM's transition-autocorrelation conservative baseline, the latter is a bounded rectangular integer-SPS grid estimator that additionally returns boundary phase. They agree on clean rectangular PSK waveforms.
+
 ---
 
 ## 10. Known Metadata vs Estimated Parameters
@@ -596,11 +648,16 @@ IQWAV production baselines can estimate:
 
 - occupied spectral regions,
 - threshold-defined bandwidth,
+- cumulative-power occupied bandwidth,
+- dominant spectral component,
 - relative spectral center,
 - spectral noise floor,
 - in-band SNR,
 - rectangular-PSK symbol rate / integer SPS,
+- rectangular symbol-grid boundary phase,
 - coarse PSK CFO.
+
+Known sample rate is assumed for these estimators. Raw-IQ sample rate and absolute RF center frequency cannot generally be inferred from samples alone; they still come from recording metadata or operator context.
 
 Absolute RF frequency requires recording-center metadata:
 
@@ -741,7 +798,9 @@ It does not yet prove real-world blind PSK baud/CFO performance, synchronization
 Current full regression suite:
 
 ```text
-432 tests passing
+567 tests passing
+0 failures
+0 skipped
 ```
 
 Coverage includes:
@@ -755,11 +814,14 @@ Coverage includes:
 - known-timing BPSK/QPSK demodulation,
 - WAV/raw-IQ ingestion,
 - FM demodulation,
-- autocorrelation,
+- autocorrelation, cross-correlation and correlation peaks,
 - occupied-band detection,
 - in-band SNR estimation,
 - rectangular-PSK symbol-rate estimation,
-- coarse PSK CFO estimation.
+- coarse PSK CFO estimation,
+- dominant spectral peak estimation,
+- cumulative-power occupied-bandwidth measurement,
+- rectangular symbol-grid estimation.
 
 Recent focused milestones:
 
@@ -767,7 +829,12 @@ Recent focused milestones:
 - occupied-band detection: 34 tests,
 - band SNR estimation: 22 tests,
 - symbol-rate estimation: 37 tests,
-- frequency-offset estimation: 30 tests.
+- frequency-offset estimation: 30 tests,
+- cross-correlation: 10 tests,
+- correlation peaks: 18 tests,
+- dominant spectral peak: 24 tests,
+- occupied bandwidth: 29 tests,
+- rectangular symbol grid: 54 tests.
 
 Passing tests demonstrate correctness only within the tested assumptions.
 
@@ -783,6 +850,8 @@ file ingestion
 FFT / PSD / spectrogram
     ↓
 filtering / power analysis
+    ↓
+correlation / peak analysis
 ```
 
 Controlled digital path:
@@ -818,7 +887,7 @@ Supported rectangular oversampled PSK path:
 ```text
 samples + known Fs
     ↓
-symbol-rate / SPS estimate
+symbol-rate / SPS estimate   (or rectangular symbol grid + boundary phase)
     ↓
 coarse CFO estimate
 ```
@@ -856,7 +925,7 @@ Do not claim:
 - blind IQ/QI ordering inference,
 - automatic sampling-rate inference from arbitrary headerless raw IQ,
 - automatic absolute RF-center inference from headerless raw IQ,
-- standardized occupied-power bandwidth measurement,
+- regulatory/standards-compliant occupied-bandwidth measurement (the cumulative-power estimator is definition-specific),
 - robust physical-channel merging / gap bridging,
 - universal blind SNR estimation in arbitrary crowded/nonstationary spectra,
 - general blind baud estimation for arbitrary pulse shaping/modulation,
@@ -922,9 +991,57 @@ Current limits:
 - principal-angle ambiguity,
 - finite-record QPSK bias possible.
 
+### Dominant spectral-peak estimator
+
+Current limits:
+
+- reports the strongest spectral component only,
+- not automatically the carrier/center frequency of a wideband modulated signal,
+- sub-bin refinement assumes an isolated peak under a rectangular window.
+
+### Cumulative-power occupied-bandwidth estimator
+
+Current limits:
+
+- the power fraction counts all measured power, including noise, DC and interference,
+- FFT-bin edge resolution of the analyzed block only,
+- single-block measurement, no cross-block averaging.
+
+### Rectangular symbol-grid estimator
+
+Current limits:
+
+- rectangular piecewise-constant symbols with integer SPS only; not RRC/pulse-shaped, not fractional-SPS,
+- `boundary_offset` is a block-level symbol-boundary phase estimate, not timing recovery,
+- symbol changes every m-th true boundary make the observable period m*SPS,
+- an observable period outside the search range may yield an in-range divisor.
+
 ---
 
-## 16. Source Code vs Notebooks
+## 16. Selective Reconciliation with the Sayan Snapshot
+
+Useful capabilities from the frozen Sayan snapshot `sayan-snapshot-9e927de` were reviewed and manually adapted into IQWAV's architecture. Nothing was merged or cherry-picked wholesale.
+
+Integrated:
+
+- cross-correlation and correlation peak detection,
+- dominant spectral peak estimation,
+- cumulative-power occupied-bandwidth measurement,
+- rectangular symbol-grid estimator with boundary offset.
+
+A 692-trial controlled benchmark compared HM's existing symbol-rate estimator with the residue-grid method. The residue-grid approach was substantially stronger under low-SNR AWGN, while both were perfect on clean/phase/amplitude/crop/CFO/short cases. HM's original estimator was intentionally retained as an independent conservative baseline rather than replaced; the residue-grid estimator lives separately as `estimate_rectangular_symbol_grid`. Detailed benchmark tables are in `LOGS.md`.
+
+Parked (reviewed, not yet integrated):
+
+- explicit-region noise/SNR estimation,
+- known-reference frequency-offset estimation,
+- controlled BPSK/QPSK classifier (candidate for Module 12).
+
+Sayan's alternate autocorrelation, SNR, CFO and symbol-rate implementations have not replaced any HM production API.
+
+---
+
+## 17. Source Code vs Notebooks
 
 Production functionality belongs in `src/iqwav/`.
 
@@ -946,7 +1063,7 @@ A notebook must not become the final application architecture.
 
 ---
 
-## 17. Testing and Validation Principles
+## 18. Testing and Validation Principles
 
 Validation ladder:
 
@@ -972,7 +1089,7 @@ Real-world validation should be repeated across multiple recordings before broad
 
 ---
 
-## 18. Data Policy
+## 19. Data Policy
 
 Do not commit large IQ/WAV recordings directly to normal Git.
 
@@ -993,7 +1110,7 @@ Ignored files can still be downloaded or created locally by collaborators; `.git
 
 ---
 
-## 19. AI / Contributor Handoff Protocol
+## 20. AI / Contributor Handoff Protocol
 
 Before modifying the repository:
 
@@ -1016,7 +1133,7 @@ Before modifying the repository:
 
 ---
 
-## 20. Current Development Status
+## 21. Current Development Status
 
 ### Completed foundation
 
@@ -1040,7 +1157,11 @@ IQWAV currently has:
 - spectral noise-floor estimation baseline,
 - blind in-band SNR estimation baseline,
 - rectangular-PSK symbol-rate estimation baseline,
-- coarse PSK CFO estimation baseline.
+- coarse PSK CFO estimation baseline,
+- cross-correlation and correlation peak utilities,
+- dominant spectral peak estimation baseline,
+- cumulative-power occupied-bandwidth measurement,
+- rectangular symbol-grid estimation baseline with block-level boundary phase.
 
 ### Real-data status
 
@@ -1058,7 +1179,9 @@ IQWAV has successfully:
 ### Automated status
 
 ```text
-432 passed
+567 passed
+0 failures
+0 skipped
 ```
 
 ### Current boundary
