@@ -16,6 +16,99 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-04 — Module 11A: controlled CFO correction integrated from Sayan snapshot B
+
+### Source
+
+Sayan frozen snapshot B:
+
+`6bb80f6d6e522578a347e623d308263f055a32d9` (`Add controlled CFO correction`)
+
+We deliberately used and adapted Sayan's correction primitive rather than
+independently reimplementing the same idea.
+
+### Mathematical convention (preserved from Sayan)
+
+```text
+r[n] = s[n] * exp(+j*2*pi*df*n/fs)
+y[n] = r[n] * exp(-j*2*pi*df*n/fs)
+```
+
+with `n = 0 .. N-1`. A positive supplied CFO applies a negative correcting
+rotation; supplying the true offset exactly inverts
+`apply_frequency_offset()`.
+
+### Architecture
+
+Sayan placed the primitive under `dsp/frequency_correction.py`; IQWAV
+places receiver-side correction under
+`src/iqwav/synchronization/frequency.py`.
+
+```text
+dsp.apply_frequency_offset()          = inject/simulate CFO
+estimation.estimate_frequency_offset() = measure coarse CFO
+synchronization.correct_frequency_offset() = remove supplied CFO
+```
+
+Public API:
+
+- `correct_frequency_offset(samples, fs, frequency_offset_hz)`
+
+### Validation improvements over Sayan
+
+- bool `fs` rejected
+- bool frequency offset rejected
+- HM validation conventions throughout
+- explicit static-phase-vs-frequency-slope semantics
+- estimate → correct integration validation
+
+Static phase is NOT removed by CFO correction: correction removes the phase
+slope with time, so a constant rotation `exp(j*phi0)` remains and the
+constellation may become stationary yet stay rotated.
+
+### Scientific validation finding
+
+Using the same lag-1 CFO estimator both before and after correction can
+self-cancel its finite-record QPSK bias and falsely report approximately
+zero residual CFO. The same-estimator chain test is therefore documented as
+an estimator self-consistency check, not proof of zero physical residual.
+
+An independent truth-based synthetic test was added: after correction,
+divide by the known clean QPSK reference, unwrap the ratio phase, fit the
+phase slope versus sample index, and convert the slope to Hz.
+
+Deterministic QPSK example (fs = 80 kS/s, SPS = 8):
+
+```text
+true CFO                     = +1000.000 Hz
+HM estimated CFO             = +1004.433 Hz
+expected physical residual   = -4.433 Hz
+independently measured residual = -4.433 Hz
+same-estimator residual      = ~0 Hz
+```
+
+The BPSK controlled case estimated +1000 Hz essentially exactly and produced
+approximately zero independently measured residual.
+
+### Automated validation
+
+- focused frequency-correction tests: 34 passed
+- existing HM CFO-estimator regression: 30 passed before the final
+  validation refinement; the production estimator remained untouched
+- full suite: 601 passed, 0 failed, 0 skipped
+
+### Scope limitation
+
+This is constant known/supplied CFO correction only. It is not phase
+recovery, Costas/PLL carrier tracking, timing recovery, AMR, filtering, or
+resampling.
+
+### Next Module 11 milestone
+
+Carrier phase recovery/correction.
+
+---
+
 ## 2026-09-04 — Added rectangular symbol-grid estimator after HM-vs-Sayan benchmark
 
 Completed a controlled head-to-head benchmark of HM's existing symbol-rate
