@@ -16,6 +16,72 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-04 — Added rectangular symbol-grid estimator after HM-vs-Sayan benchmark
+
+Completed a controlled head-to-head benchmark of HM's existing symbol-rate
+estimator against Sayan's transition-residue estimator from frozen snapshot
+`9e927de`.
+
+Benchmark:
+- 692 deterministic trials
+- BPSK and QPSK
+- SPS 2, 3, 4, 5, 8, 12, 16, 24, 32
+- clean, phase, amplitude, crop, AWGN, CFO, short-block and pathological cases
+
+Results:
+- HM overall correct: 92.8%
+- Sayan method overall correct: 95.4%
+- HM false-estimate rate: 1.6%
+- Sayan false-estimate rate: 1.7%
+- HM rejection rate: 5.6%
+- Sayan rejection rate: 2.9%
+
+Low-SNR AWGN:
+- 0 dB: HM 22.2% correct, Sayan 77.8%
+- -5 dB: HM 0% correct, Sayan 44.4%
+
+Boundary-phase benchmark:
+- 194 cropped rectangular-waveform trials
+- Sayan boundary offset exact in 194/194 cases
+
+Architecture decision:
+- HM's existing `estimate_symbol_rate()` remains unchanged as an independent,
+  conservative transition-autocorrelation estimator.
+- Sayan's method was not used as a replacement.
+- Its transition-residue method was adapted into a separate bounded symbol-grid
+  estimator.
+
+Added:
+- `RectangularSymbolGridEstimate`
+- `estimate_rectangular_symbol_grid`
+
+File:
+- `src/iqwav/estimation/symbol_grid.py`
+
+The new estimator returns:
+- symbol rate
+- integer samples per symbol
+- block-level symbol-boundary offset
+- quality
+- concentration
+- symbol count
+- effective transition count
+- searched SPS range
+
+Important semantics:
+- `boundary_offset` is a block-level symbol-grid phase estimate, not timing recovery.
+- The estimator assumes rectangular, piecewise-constant symbols with integer SPS.
+- It is not a general pulse-shaped or fractional-SPS blind baud estimator.
+- Sparse/repeating symbol transitions can make only a multiple of the transmitter
+  symbol period observable; if that period lies outside the search range, an
+  in-range divisor may be returned. This is an identifiability limitation.
+
+Validation:
+- New symbol-grid tests: 54 passed
+- Existing HM symbol-rate tests: 37 passed
+- Full suite after integration: 567 passed
+
+
 ## 2026-09-04 — Integrated cumulative-power occupied-bandwidth estimator
 
 Integrated and adapted the cumulative-power occupied-bandwidth capability
