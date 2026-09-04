@@ -16,6 +16,47 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+
+## 2026-09-04 — Integrated cross-correlation and correlation peak utilities from Sayan snapshot
+
+Integrated selected correlation capabilities from frozen Sayan snapshot
+`9e927de` without merging or cherry-picking Sayan's branch.
+
+Added:
+- `cross_correlation`
+- `normalized_cross_correlation`
+- `find_correlation_peaks`
+
+Architecture:
+- HM's existing `autocorrelation` and `normalized_autocorrelation`
+  remain unchanged.
+- Sayan's alternative autocorrelation implementation was intentionally
+  not adopted because its lag/normalization/API semantics differ from
+  HM's production convention used by symbol-rate and CFO estimation.
+- Cross-correlation uses
+  `r_xy[k] = Σ x[n+k] * conj(y[n])`.
+- A delayed first input therefore produces a positive correlation lag.
+- Normalization uses exact overlap energies for each lag.
+- Correlation peak detection operates on magnitude by default and
+  supports complex correlations.
+
+Files:
+- Added `src/iqwav/correlation/cross_correlation.py`
+- Added `src/iqwav/correlation/peaks.py`
+- Updated `src/iqwav/correlation/__init__.py`
+- Added focused unit tests for cross-correlation and peak detection.
+
+Validation:
+- Focused correlation suite: 58 passed
+- Full suite: 460 passed
+- Previous full suite: 432 passed
+- 28 new tests added
+- Existing 30 HM autocorrelation tests remain passing
+
+Status:
+Validated on the `integrate-sayan` branch.
+
+
 ## 2026-09-01 — Coarse PSK frequency-offset estimation implemented and verified
 
 ### Implementation
