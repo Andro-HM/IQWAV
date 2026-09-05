@@ -237,17 +237,25 @@ Completed curriculum currently covers:
 - Module 9 — Correlation and statistical signal analysis
 - Module 10 — Blind parameter estimation
 
-The current implementation boundary is therefore **Modules 0–10**.
+The current implementation boundary is **Modules 0–11** for rectangular
+IQWAV BPSK/QPSK:
 
-The next major learning/implementation phase is:
+- Module 11A — coarse CFO correction
+- Module 11C — whole-block residual CFO refinement
+- Module 11B — static carrier phase recovery
+- Module 11D — known-SPS integer symbol-boundary recovery
 
-- Module 11 — Synchronization
+That is not Costas/PLL tracking, fractional timing, pulse-shaped timing,
+or clock-drift recovery.
+
+The next major implementation phase is:
+
+- Module 12 — AMC / AMR
 
 Do not assume the following have already been implemented merely because directories exist for them:
 
-- carrier-frequency correction/tracking,
-- phase recovery,
-- timing recovery,
+- Costas/PLL carrier tracking,
+- fractional or pulse-shaped timing recovery,
 - AMR,
 - blind FEC,
 - interleaver identification,
@@ -361,10 +369,22 @@ IQWAV/
 - `estimate_occupied_bandwidth(...)`
 - `RectangularSymbolGridEstimate`
 - `estimate_rectangular_symbol_grid(...)`
+- `PhaseOffsetEstimate`
+- `estimate_phase_offset(...)`
+- `ResidualFrequencyOffsetEstimate`
+- `estimate_residual_frequency_offset(...)`
+- `SymbolTimingEstimate`
+- `estimate_symbol_timing(...)`
 
 These are baseline blind/semi-blind estimators with explicitly limited scopes. They are not yet a universal unknown-signal-analysis engine.
 
-`src/iqwav/synchronization/` is reserved for the next phase: CFO correction, carrier/phase recovery and symbol timing recovery.
+`src/iqwav/synchronization/`
+
+- `correct_frequency_offset(...)`
+- `correct_phase_offset(...)`
+- `correct_symbol_timing(...)`
+
+Caller-supplied correction primitives. They do not estimate the impairment.
 
 `src/iqwav/amr/`, `interleaving/`, `fec/`, `framing/`, `pipeline/` and `ui/` remain future subsystems.
 
@@ -442,13 +462,11 @@ Implemented:
 - `bpsk_demodulate(...)`
 - `qpsk_demodulate(...)`
 
-Current assumptions:
-
-- symbol boundaries known,
-- samples-per-symbol supplied,
-- no timing recovery,
-- no carrier recovery,
-- no CFO/phase correction.
+The demodulators still assume a symbol-aligned block and a supplied
+integer samples-per-symbol. They do not themselves estimate timing,
+CFO, or phase. Module 11D can produce that alignment for rectangular
+integer-SPS BPSK/QPSK; 11A/11C/11B can remove constant CFO and static
+phase before demodulation.
 
 ### 9.6 WAV and Raw IQ Ingestion
 
@@ -588,7 +606,10 @@ Returns CFO, per-sample phase increment and lag-1 coherence.
 
 Validated for complex, oversampled rectangular BPSK/QPSK-like signals with constant CFO, known Fs and moderate SNR.
 
-This is coarse estimation only; no carrier correction or tracking is performed. Finite QPSK records can show small residual bias because random symbol-boundary terms do not cancel exactly in a finite observation.
+This is coarse estimation only. Caller-supplied correction is
+`correct_frequency_offset` (Module 11A). Finite QPSK records can show
+small residual bias because random symbol-boundary terms do not cancel
+exactly in a finite observation; Module 11C refines that leftover.
 
 ### 9.13 Dominant Spectral Peak Estimation
 
@@ -618,9 +639,50 @@ Implemented:
 
 Groups first-difference magnitudes by `sample_index % P` for each candidate integer period, chance-corrects the strongest residue bin into a quality score, resolves divisor ambiguity by selecting the largest near-best candidate with a divisor-dominance guard, and reports the winning residue class as `boundary_offset`: symbol-start sample indices are congruent to it modulo `samples_per_symbol`.
 
-`boundary_offset` is a block-level symbol-boundary phase estimate, NOT timing recovery.
+`boundary_offset` is a block-level symbol-boundary phase estimate, NOT timing recovery. Known-SPS integer timing recovery is Module 11D.
 
 This estimator and `estimate_symbol_rate` (9.11) are separate production paths: the former is HM's transition-autocorrelation conservative baseline, the latter is a bounded rectangular integer-SPS grid estimator that additionally returns boundary phase. They agree on clean rectangular PSK waveforms.
+
+### 9.16 Module 11 Synchronization (rectangular BPSK/QPSK)
+
+Implemented:
+
+- `correct_frequency_offset(samples, fs, frequency_offset_hz)` — Module 11A
+- `estimate_residual_frequency_offset(samples, fs, modulation)` — Module 11C
+- `estimate_phase_offset(samples, modulation)` — Module 11B
+- `correct_phase_offset(samples, phase_offset_rad)` — Module 11B
+- `estimate_symbol_timing(samples, samples_per_symbol)` — Module 11D
+- `correct_symbol_timing(samples, samples_per_symbol, boundary_offset)` — Module 11D
+
+Bounded chain for the current rectangular integer-SPS BPSK/QPSK model:
+
+```text
+estimate_frequency_offset            # 11A coarse lag-1
+correct_frequency_offset
+estimate_residual_frequency_offset   # 11C whole-block M-th-power
+correct_frequency_offset
+estimate_phase_offset                # 11B static M-th-power
+correct_phase_offset
+estimate_symbol_timing               # 11D known-SPS residue
+correct_symbol_timing
+known-timing BPSK/QPSK demodulation
+```
+
+11C is whole-block residual-frequency refinement after coarse 11A. It is
+not a Costas loop or PLL. Canonical unambiguous ranges are BPSK
+`[-Fs/4, Fs/4)` and QPSK `[-Fs/8, Fs/8)`.
+
+11B is one-shot static phase. Blind PSK phase remains rotationally
+ambiguous (modulo π for BPSK, modulo π/2 for QPSK).
+
+11D is known-SPS integer symbol-boundary recovery: for
+`observed = clean[C:]`, `boundary_offset = (-C) % SPS`, and correction
+drops the leading partial symbol then trims trailing incomplete samples.
+`quality` is a chance-corrected transition-concentration diagnostic, not
+calibrated confidence, probability, or SNR.
+
+This is not fractional timing, pulse-shaped/RRC timing, clock-drift
+tracking, or a timing PLL.
 
 ---
 
@@ -655,7 +717,10 @@ IQWAV production baselines can estimate:
 - in-band SNR,
 - rectangular-PSK symbol rate / integer SPS,
 - rectangular symbol-grid boundary phase,
-- coarse PSK CFO.
+- coarse PSK CFO,
+- residual constant CFO (11C, known BPSK/QPSK),
+- static carrier phase (11B, known BPSK/QPSK, modulo constellation ambiguity),
+- integer symbol-boundary offset (11D, known integer SPS).
 
 Known sample rate is assumed for these estimators. Raw-IQ sample rate and absolute RF center frequency cannot generally be inferred from samples alone; they still come from recording metadata or operator context.
 
@@ -789,7 +854,9 @@ Real-data validation supports claims that IQWAV can:
 - automatically discover occupied spectral regions in real OTA IQ,
 - estimate baseline in-band SNR for those regions.
 
-It does not yet prove real-world blind PSK baud/CFO performance, synchronization, AMR or digital payload recovery.
+It does not yet prove real-world blind PSK baud/CFO performance, digital
+synchronization, AMR or digital payload recovery. Module 11 is
+synthetic/rectangular BPSK/QPSK only.
 
 ---
 
@@ -798,7 +865,7 @@ It does not yet prove real-world blind PSK baud/CFO performance, synchronization
 Current full regression suite:
 
 ```text
-567 tests passing
+861 tests passing
 0 failures
 0 skipped
 ```
@@ -821,7 +888,11 @@ Coverage includes:
 - coarse PSK CFO estimation,
 - dominant spectral peak estimation,
 - cumulative-power occupied-bandwidth measurement,
-- rectangular symbol-grid estimation.
+- rectangular symbol-grid estimation,
+- controlled CFO correction (11A),
+- static carrier phase recovery (11B),
+- whole-block residual CFO refinement (11C),
+- known-SPS integer symbol-timing recovery (11D).
 
 Recent focused milestones:
 
@@ -834,7 +905,9 @@ Recent focused milestones:
 - correlation peaks: 18 tests,
 - dominant spectral peak: 24 tests,
 - occupied bandwidth: 29 tests,
-- rectangular symbol grid: 54 tests.
+- rectangular symbol grid: 54 tests,
+- residual-frequency estimation: 70 tests,
+- known-SPS integer timing: 90 tests.
 
 Passing tests demonstrate correctness only within the tested assumptions.
 
@@ -889,7 +962,15 @@ samples + known Fs
     ↓
 symbol-rate / SPS estimate   (or rectangular symbol grid + boundary phase)
     ↓
-coarse CFO estimate
+coarse CFO estimate + correction                 (11A)
+    ↓
+whole-block residual CFO refinement + correction (11C)
+    ↓
+static carrier phase estimate + correction       (11B)
+    ↓
+known-SPS integer symbol-boundary recovery       (11D)
+    ↓
+known-timing BPSK/QPSK demodulation
 ```
 
 Real OTA path demonstrated:
@@ -930,10 +1011,10 @@ Do not claim:
 - universal blind SNR estimation in arbitrary crowded/nonstationary spectra,
 - general blind baud estimation for arbitrary pulse shaping/modulation,
 - universal CFO estimation for arbitrary modulations,
-- CFO correction,
-- carrier tracking,
-- phase recovery,
-- symbol timing recovery,
+- Costas/PLL carrier tracking,
+- fractional or subsample timing recovery,
+- pulse-shaped / RRC timing recovery,
+- timing-drift / clock-offset tracking,
 - matched filtering / RRC receiver chain,
 - automatic modulation recognition,
 - FSK demodulation,
@@ -986,10 +1067,39 @@ Current limits:
 
 - complex oversampled rectangular PSK-like input,
 - constant CFO,
-- coarse estimate only,
-- no correction/tracking,
+- coarse estimate only; leftover bias is refined by 11C, not by this estimator,
 - principal-angle ambiguity,
 - finite-record QPSK bias possible.
+
+### Residual-frequency estimator (11C)
+
+Current limits:
+
+- known IQWAV BPSK/QPSK only,
+- constant leftover CFO, not oscillator drift,
+- unambiguous range `[-Fs/(2M), Fs/(2M))`,
+- not a replacement for coarse 11A,
+- not a Costas loop or PLL.
+
+### Static phase estimator (11B)
+
+Current limits:
+
+- known IQWAV BPSK/QPSK only,
+- phase assumed constant over the block,
+- intrinsic PSK rotational ambiguity remains,
+- `symmetry` is a diagnostic, not calibrated confidence.
+
+### Integer symbol-timing estimator (11D)
+
+Current limits:
+
+- known integer SPS >= 2,
+- rectangular piecewise-constant symbols only,
+- integer sample offset only; not fractional, RRC, or clock drift,
+- zero-transition blocks are unidentifiable,
+- `quality` is a chance-corrected transition-concentration diagnostic,
+  not calibrated confidence, probability, or SNR.
 
 ### Dominant spectral-peak estimator
 
@@ -1037,7 +1147,10 @@ Parked (reviewed, not yet integrated):
 - known-reference frequency-offset estimation,
 - controlled BPSK/QPSK classifier (candidate for Module 12).
 
-Sayan's alternate autocorrelation, SNR, CFO and symbol-rate implementations have not replaced any HM production API.
+Snapshot B (`6bb80f6`) controlled CFO correction was adapted into
+`correct_frequency_offset` as Module 11A. Sayan's alternate
+autocorrelation, SNR, CFO and symbol-rate implementations have not
+replaced any HM production API.
 
 ---
 
@@ -1161,7 +1274,11 @@ IQWAV currently has:
 - cross-correlation and correlation peak utilities,
 - dominant spectral peak estimation baseline,
 - cumulative-power occupied-bandwidth measurement,
-- rectangular symbol-grid estimation baseline with block-level boundary phase.
+- rectangular symbol-grid estimation baseline with block-level boundary phase,
+- controlled CFO correction (11A),
+- static carrier phase recovery (11B),
+- whole-block residual CFO refinement (11C),
+- known-SPS integer symbol-boundary recovery (11D).
 
 ### Real-data status
 
@@ -1179,7 +1296,7 @@ IQWAV has successfully:
 ### Automated status
 
 ```text
-567 passed
+861 passed
 0 failures
 0 skipped
 ```
@@ -1188,23 +1305,9 @@ IQWAV has successfully:
 
 The current system is:
 
-**working DSP + controlled demodulation + first blind/semi-blind parameter-estimation foundation**
+**working DSP + controlled demodulation + first blind/semi-blind parameter-estimation foundation + rectangular BPSK/QPSK synchronization (11A–11D)**
 
-The next major phase is:
-
-```text
-Module 11 — synchronization
-    ↓
-CFO correction
-    ↓
-carrier / phase recovery
-    ↓
-symbol timing recovery
-    ↓
-synchronized symbols
-```
-
-Then:
+Module 11 is complete for that bounded model. The next major phase is:
 
 ```text
 Module 12 — AMR

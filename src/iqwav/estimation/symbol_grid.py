@@ -199,10 +199,12 @@ def estimate_rectangular_symbol_grid(
         not a defect to be disguised with heuristic tuning. A block
         containing effectively a single observable transition is
         rejected: every candidate period explains one lone impulse
-        equally well. A residual carrier offset makes the waveform
-        non-constant within a symbol and lowers ``quality``; small
-        offsets do not move the estimate, large ones eventually destroy
-        the structure.
+        equally well. That guard is specific to unknown-period grid
+        search. Known-SPS timing recovery is a separate estimator and
+        can identify a single clean transition. A residual carrier
+        offset makes the waveform non-constant within a symbol and
+        lowers ``quality``; small offsets do not move the estimate,
+        large ones eventually destroy the structure.
 
     Args:
         samples: 1-D real or complex finite numeric samples with at

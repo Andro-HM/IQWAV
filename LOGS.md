@@ -16,6 +16,146 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-06 — Module 11D: known-SPS integer symbol-timing recovery
+
+### Decision
+
+Candidate A — known-SPS transition-residue timing — is the production
+Module 11D estimator.
+
+Candidate B — whole-block least-squares timing — is **PARKED** because
+it showed no benefit on the tested rectangular BPSK/QPSK campaign: A
+and B never disagreed, and B saved no record. PARKED means keep it as
+a future candidate. It is not scientifically disproven, not a rejected
+algorithm, and not a demonstrated failure of the least-squares
+objective. The head-to-head script is preserved:
+
+`scripts/exp_11d_timing_headtohead.py`
+
+Costas/PLL remain parked. No interpolator, resampler, circular shift,
+Gardner, Mueller-Muller, or timing loop was added.
+
+### Architecture
+
+```text
+estimate_symbol_timing(samples, samples_per_symbol)
+    = measure integer boundary offset given known SPS
+
+synchronization.correct_symbol_timing(
+    samples, samples_per_symbol, boundary_offset
+)
+    = drop the leading partial symbol and trim the trailing incomplete
+      samples
+```
+
+There is no `dsp.apply_timing_offset`. The synthetic impairment is a
+crop of an aligned rectangular generator waveform, matching the existing
+symbol-grid tests.
+
+`estimate_rectangular_symbol_grid` remains a baud/grid estimator. Its
+`boundary_offset` is still not timing recovery. Module 11D is the
+known-SPS specialization that actually aligns the block. The grid
+estimator's single-transition reject is unchanged: unknown-period search
+cannot identify SPS from one impulse. Known-SPS timing can.
+
+### Production algorithm (Candidate A)
+
+```text
+d[n] = |x[n] - x[n-1]|
+accumulate d into bin n % SPS
+boundary_offset = argmax bin
+quality = (concentration - 1/SPS) / (1 - 1/SPS)
+```
+
+Reuses `_transition_profile` and `_score_period` from
+`src/iqwav/estimation/symbol_grid.py` at the single known period.
+No `min_quality` argument. Reject only when total transition magnitude
+is zero. One clean transition remains estimable.
+
+Canonical truth for `observed = clean[C:]`:
+
+```text
+boundary_offset = (-C) % SPS ∈ [0, SPS)
+```
+
+Correction:
+
+```text
+aligned = observed[offset : offset + n_complete * SPS]
+n_complete = (N - offset) // SPS
+```
+
+### Head-to-head evidence (experiment, not unit tests)
+
+4800 main records, rectangular BPSK/QPSK, `N_SYMBOLS=512`,
+`SPS ∈ {2,4,8,16}`, every crop residue, 5 bit seeds × 5 noise seeds.
+
+```text
+clean     A 300/300 exact    B 300/300 exact    disagree 0
+20 dB     A 1500/1500        B 1500/1500        disagree 0
+10 dB     A 1500/1500        B 1500/1500        disagree 0
+0 dB      A 1500/1500        B 1500/1500        disagree 0  (characterization)
+```
+
+Clean aligned output equalled the known clean slice for both (300/300).
+After either correction, BER/SER matched the oracle-aligned floor
+(0 at clean/20/10 dB). Unaligned `delay=0` BER stayed ~12–23%.
+One clean transition: A 60/60, B 60/60. Zero transitions: both
+unidentifiable, all residues tied, both report 0. Phase 0.8 rad and
+amplitude ×3.7: both invariant. B's common-support score never disagreed
+with `SSE/n_used`. B was 6–31× slower and saved no record.
+
+B is therefore PARKED for lack of benefit in this campaign, not
+because it was scientifically disproven.
+
+### Public API
+
+```python
+@dataclass(frozen=True)
+class SymbolTimingEstimate:
+    boundary_offset: int
+    quality: float
+
+estimate_symbol_timing(samples, samples_per_symbol) -> SymbolTimingEstimate
+correct_symbol_timing(samples, samples_per_symbol, boundary_offset)
+```
+
+`quality` is a chance-corrected concentration diagnostic, not calibrated
+confidence, probability, or SNR.
+
+### Files
+
+- `src/iqwav/estimation/symbol_timing.py`
+- `src/iqwav/synchronization/timing.py`
+- `tests/unit/test_symbol_timing.py`
+- `tests/unit/test_timing_correction.py`
+
+### Automated validation
+
+- focused 11D: 90 passed
+- related regressions (symbol grid/rate, demod, waveform, 11A/11B/11C):
+  374 passed
+- full suite: 861 passed, 0 failed, 0 skipped
+  (previous accepted 11C baseline 771, plus 90 Module 11D tests)
+
+### Scope limitation
+
+Integer-sample, known-SPS, block-level alignment for rectangular IQWAV
+BPSK/QPSK. Not fractional timing, not RRC/pulse-shaping, not timing
+drift, not baud re-estimation, not 1-sps (SPS must be >= 2), not real
+OTA PSK validation. Zero-transition blocks are unidentifiable.
+Synthetic 20 dB success is not real-world RF robustness.
+
+### Next
+
+Rectangular BPSK/QPSK synchronization for this signal model now has
+coarse CFO (11A), static phase (11B), residual CFO (11C), and integer
+timing (11D). Costas/PLL stay parked. Do not start AMC/Module 12, FEC,
+or post-Snapshot-B Sayan timing work unless HM explicitly asks.
+
+
+---
+
 ## 2026-09-06 — Module 11C production: whole-block M-th-power residual CFO
 
 ### Decision

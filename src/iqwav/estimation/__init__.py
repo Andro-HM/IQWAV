@@ -18,6 +18,7 @@ from .symbol_grid import (
     estimate_rectangular_symbol_grid,
 )
 from .symbol_rate import SymbolRateEstimate, estimate_symbol_rate
+from .symbol_timing import SymbolTimingEstimate, estimate_symbol_timing
 
 __all__ = [
     "FrequencyOffsetEstimate",
@@ -29,6 +30,7 @@ __all__ = [
     "ResidualFrequencyOffsetEstimate",
     "SNREstimate",
     "SymbolRateEstimate",
+    "SymbolTimingEstimate",
     "detect_occupied_bands",
     "estimate_band_snr",
     "estimate_frequency_offset",
@@ -38,4 +40,5 @@ __all__ = [
     "estimate_rectangular_symbol_grid",
     "estimate_residual_frequency_offset",
     "estimate_symbol_rate",
+    "estimate_symbol_timing",
 ]
