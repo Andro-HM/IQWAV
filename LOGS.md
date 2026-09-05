@@ -16,6 +16,355 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-06 — Module 11C production: whole-block M-th-power residual CFO
+
+### Decision
+
+The lag-1 M-th-power residual-frequency estimator recorded in the
+2026-09-05 11C LOGS entry is **REJECTED** as the production algorithm.
+
+The production Module 11C estimator is the frozen whole-block M-th-power
+tone-frequency method (Astra-inspired): global magnitude scaling, raise
+to M, maximise whole-block coherent tone power with 8x zero-padded FFT
+initialisation and local Brent refinement, canonical M-th-power search
+range, no deadband.
+
+Costas/PLL remain parked. Timing recovery has not started.
+
+### Why lag-1 11C was rejected
+
+On the motivating clean QPSK block (seed 102, +1000 Hz, `Fs=80 kHz`,
+SPS=8) lag-1 11C did remove the documented ~4.433 Hz leftover and 11B
+then accepted. That clean success does **not** restore 11B under 20 dB
+AWGN.
+
+Same QPSK chain, 20 dB, noise seeds 1–3 (physical leftover after 11A,
+then lag-1 11C):
+
+```text
+seed 1: 11A leftover +0.772 Hz → lag-1 leftover +1.636 Hz
+        11B accept, symmetry 0.095, wrap_err +0.537 rad
+seed 2: 11A leftover -0.012 Hz → lag-1 leftover -0.399 Hz
+        11B accept, symmetry 0.413, wrap_err -0.514 rad
+seed 3: 11A leftover -3.612 Hz → lag-1 leftover +1.038 Hz
+        11B accept, symmetry 0.146, wrap_err +0.554 rad
+```
+
+Lag-1 **increased** an already-small 11A leftover on seeds 1 and 2.
+Default 11B acceptance was not restoration: wrap error stayed ~0.5 rad
+and symmetry collapsed. The lag-1 `coherence` / `min_coherence` gate
+was not the failure mode and was not tuned.
+
+That candidate remains in this file as historical evidence (entry below).
+It is not the active estimator.
+
+### Production algorithm
+
+```text
+z = (x / mean(|x|)) ** M          # BPSK M=2, QPSK M=4
+P(df) = |sum z[n] exp(-j 2π M df n / Fs)|^2
+```
+
+- 8x zero-padded FFT: global peak inside the canonical residual range
+- Brent maximises the same `P(df)` in a local window of 8 padded-FFT
+  residual bins around that peak (`xatol=1e-6` Hz)
+- no deadband, no per-record tuning
+- correction reuses `correct_frequency_offset`
+
+Canonical unambiguous ranges:
+
+```text
+BPSK: [-Fs/4, +Fs/4)
+QPSK: [-Fs/8, +Fs/8)
+```
+
+Alias period `Fs/M`. This does not replace coarse 11A acquisition.
+
+### Public API
+
+```python
+estimate_residual_frequency_offset(samples, fs, modulation)
+    -> ResidualFrequencyOffsetEstimate(residual_frequency_hz, phase_increment_rad)
+```
+
+`phase_increment_rad = 2π * residual_frequency_hz / fs`.
+
+Lag-1 `coherence` and `min_coherence` are **not** preserved. Those names
+were lag-1 statistics of the rejected estimator. The validated
+whole-block method has no lag-1 reject gate; keeping the field would
+imply a reliability contract that was never validated for this
+algorithm. 11C was never a committed production API, so this is not a
+break of an accepted public surface. 11A `FrequencyOffsetEstimate.coherence`
+is unchanged.
+
+### Validation evidence (experiments, not unit-test campaigns)
+
+Stage A (script, original 20 dB QPSK chain, seeds 1–3):
+whole-block physical leftover 0.00017 / 0.00053 / 0.00048 Hz; 11B
+symmetry ~0.962 matching oracle; 0 BER after 11B phase correction.
+
+Stage B (100 QPSK + 100 BPSK held-out, still ±50 Hz development cap):
+BPSK near oracle (max leftover 1.22e-3 Hz, 0 11B rejects, 0 BER).
+QPSK median leftover 3.96e-4 Hz, but 8/100 11B rejects and BER 3.9%
+from records whose 11A leftover was ~55–57 Hz, **outside ±50 Hz**.
+Whole-block never worsened |11A leftover|. Worst five all saturated
+the artificial cap at ~+49.4 Hz.
+
+Stage B2 (same 200 records, now development data; only change is
+canonical search range): all eight QPSK failures disappeared. QPSK
+max leftover 1.62e-3 Hz; BPSK unchanged; 0 11B rejects; 0 BER; 0 alias;
+0 wrong-peak; 0 worsenings. Runtime unchanged (~21 ms median).
+
+Stage C (fresh held-out 20 dB, bits 30000–30009 × noise 40000–40009,
+canonical range):
+
+```text
+200 records, whole-block vs 11A-only vs oracle
+bias +1.48e-5 Hz, RMSE 5.15e-4 Hz
+|phys| median/p95/max = 3.38e-4 / 1.03e-3 / 1.55e-3 Hz
+alias/wrong-peak 0/0; worsens |11A| 0/200
+11B rejects 0/200 (11A-only: 122/200)
+BER 0 / 1228800; SER 0 / 819200
+runtime median/p95 20.2 / 22.8 ms
+```
+
+Stage D (no 11A; exact injected residuals 0, ±0.001, ±0.01, ±0.1, ±1,
+±4.433, ±5 Hz; 3×20 fresh seeds; 1560 records):
+
+```text
+QPSK: bias -4.01e-5 Hz, RMSE 5.33e-4 Hz, max |phys| 1.86e-3 Hz
+BPSK: bias +1.41e-5 Hz, RMSE 4.58e-4 Hz, max |phys| 1.79e-3 Hz
+true 0 Hz invented |CFO| max 1.12e-3 (QPSK) / 1.21e-3 (BPSK)
+all 60/60 zero-Hz records increase |residual| as expected
+no |phys| > 0.005 Hz; 0 alias; 0 wrong-peak
+11B rejects 0; BER 0
+no deadband added: invented millihertz error is downstream-negligible
+```
+
+The 0.005 Hz leftover bound is a research target used in these
+campaigns, not a permanent product specification.
+
+### Automated validation
+
+- focused residual-frequency tests: 70 passed
+- related regressions (coarse CFO, static phase, impairments,
+  modulation, demodulation, waveform): 261 passed
+- full suite: 771 passed, 0 failed, 0 skipped
+  (committed 11B baseline 701, plus 70 whole-block 11C tests;
+   the uncommitted lag-1 11C suite of 90 tests was replaced)
+
+### Scope limitation
+
+Constant residual CFO, known rectangular IQWAV BPSK/QPSK (integer-SPS
+or ideal 1-sps samples), 20 dB AWGN rectangular campaign. Not carrier
+tracking, not a Costas loop, not a PLL, not timing recovery, not AMR,
+not pulse-shaped PSK, not a replacement for coarse 11A. Canonical range
+`[-Fs/(2M), Fs/(2M))`. Synthetic held-out success is not real-world RF
+validation.
+
+### Next
+
+Costas/PLL stay parked. Symbol timing recovery remains the next
+synchronization stage after this residual-frequency refinement.
+
+---
+
+## 2026-09-05 — REJECTED / historical: lag-1 M-th-power residual-frequency candidate (not production 11C)
+
+This entry is **not** the production Module 11C algorithm. It is the
+experimental record of a lag-1 M-th-power residual estimator that was
+**rejected** after the 20 dB QPSK downstream 11A→11C→11B chain failed
+(see 2026-09-06). Evidence below is preserved; do not treat the APIs or
+“next milestone” sentences in this entry as current.
+
+### Scope
+
+This historical experiment implemented only:
+
+- one-shot residual constant-CFO estimation for rectangular IQWAV BPSK/QPSK
+- reuse of existing `correct_frequency_offset` (no new correction primitive)
+
+This is bounded leftover-frequency refinement after coarse 11A correction,
+not general carrier tracking.
+
+Not implemented, deliberately: Costas loop, PLL, NCO, loop filter,
+time-varying frequency tracking, timing recovery, AMC/AMR, pulse-shaped /
+RRC / fractional-SPS support, pipeline integration, and any Sayan
+post-Snapshot-B work. Costas/PLL remain parked until evidence shows that
+constant residual-frequency correction is insufficient.
+
+Validated only on:
+
+- rectangular integer-SPS IQWAV BPSK/QPSK waveforms
+- ideal 1-sample-per-symbol samples of those same constellations
+
+This does not imply support for arbitrary pulse-shaped oversampled PSK.
+
+### Architecture
+
+The existing inject / measure / remove separation is preserved. 11C adds
+only the residual-frequency measurement:
+
+```text
+dsp.apply_frequency_offset()                      = inject known CFO (existing)
+estimation.estimate_frequency_offset()            = coarse lag-1 CFO (existing)
+synchronization.correct_frequency_offset()        = remove supplied CFO (existing)
+estimation.estimate_residual_frequency_offset()   = residual M-th-power CFO (new)
+synchronization.correct_frequency_offset()        = remove leftover CFO (reuse)
+estimation.estimate_phase_offset()                = static phase (existing 11B)
+synchronization.correct_phase_offset()            = remove static phase (existing)
+```
+
+Public API:
+
+- `estimate_residual_frequency_offset(samples, fs, modulation, *, min_coherence=0.05)`
+  returning a frozen
+  `ResidualFrequencyOffsetEstimate(residual_frequency_hz, phase_increment_rad, coherence)`
+
+`phase_increment_rad` is the per-sample residual-carrier increment of the
+original samples, so
+`residual_frequency_hz = fs * phase_increment_rad / (2*pi)`.
+Callers pass `residual_frequency_hz` into existing
+`correct_frequency_offset`.
+
+The coarse lag-1 estimator was not changed.
+
+### Estimator mathematics
+
+After global magnitude scale `u = x / mean(|x|)`, raise to the constellation
+power M (BPSK M=2, QPSK M=4) and take the overlap-normalized lag-1 product
+of `z = u**M`:
+
+```text
+r1     = mean(z[1:] * conj(z[:-1]))
+theta  = wrap(angle(r1)) into [-pi, +pi)
+df_hat = fs * theta / (2*pi*M)
+```
+
+`c_M` constellation-reference compensation is not used: it is a constant
+and cancels in the lag-1 product. Dividing the powered increment by M
+recovers the original-sample residual CFO, not M times that CFO.
+
+Canonical unambiguous ranges from wrapping the powered increment into
+`[-pi, +pi)`:
+
+```text
+BPSK (M=2): [-fs/4, +fs/4)
+QPSK (M=4): [-fs/8, +fs/8)
+```
+
+Offsets outside that interval alias with period `fs/M`. That range is
+narrower than coarse lag-1 (`(-fs/2, fs/2]`), which is why 11C does not
+replace 11A. Near-boundary recovery was tested inside the half-open
+interval; exact open-endpoint uniqueness (`+fs/(2M)` vs `-fs/(2M)`) is
+not claimed.
+
+### Reliability measure
+
+Overlap-normalized lag-1 coherence using the same overlap on both sides:
+
+```text
+coherence = |mean(z[1:] * conj(z[:-1]))|
+            / sqrt(mean(|z[1:]|**2) * mean(|z[:-1]|**2))
+```
+
+Cauchy-Schwarz bounds this in `[0, 1]`. It is a reliability diagnostic
+under the known rectangular BPSK/QPSK model only — NOT calibrated
+confidence, NOT SNR, and NOT a general detector that rejects every
+unstructured or mismatched signal. `min_coherence=0.05` follows the
+existing HM estimator threshold style; 0 is allowed for diagnostic use.
+No threshold was tuned to make tests pass.
+
+### Scientific validation
+
+- Clean rectangular BPSK/QPSK leftovers `{0, ±1, ±4.433, ±5, ±50, ±200}` Hz
+  recovered to ~1e-12–1e-6 Hz; coherence = 1.0.
+- M-scale regression: a 5 Hz leftover returns 5 Hz, not `M*5` Hz.
+- Zero-CFO QPSK reports 0 Hz; constellation orientation does not invent
+  a frequency.
+- Static phase and amplitude scaling leave the frequency estimate unchanged.
+- Ideal symbol-rate (1 sps) samples of the same constellations recover
+  injected leftovers exactly. Not a pulse-shaped claim.
+- Uncorrected QPSK `+1000 Hz` (inside `±fs/8` at 80 kS/s): 11C reports
+  `1000.000 Hz`; lag-1 on the same block remains `+1004.433 Hz`. This
+  shows 11C is unbiased on the documented finite-record QPSK case; it is
+  not permission to delete coarse acquisition.
+- After 11A correct-by-own-estimate on that QPSK block:
+
+```text
+true CFO                     = +1000.000 Hz
+HM lag-1 estimate            = +1004.433 Hz
+independent leftover after 11A = -4.433 Hz
+11C leftover estimate          = -4.433 Hz
+independent leftover after 11C = ~0 Hz (~6e-13 Hz)
+```
+
+  PRIMARY truth is the independent clean-reference phase-slope residual.
+  Re-running 11C after correcting by its own estimate reports 0 Hz and is
+  labeled self-consistency only.
+- Motivating 11B chain (QPSK, `phi=0.8`, CFO `+1000 Hz`): after 11A alone,
+  phase symmetry = 0.0323 and 11B rejects. After 11A then 11C, independent
+  leftover ~0 Hz, 11B accepts with symmetry = 1.0. The returned phase is
+  `0.8 - pi/2` (rotational ambiguity); wrapped residual vs 0.8 is ~0.
+  Absolute bit labeling is still not recovered.
+- 5 Hz stale-CFO block (QPSK seed 202, 0.2048 s): independent leftover
+  before 11C = +5.000 Hz, 11B symmetry = 0.023. After 11C, independent
+  leftover ~0 Hz and 11B accepts (symmetry = 1.0 at injected phase 0.3).
+- BPSK 11A→11C→11B still works (coarse was already exact on that block).
+- Alias limitation: QPSK leftover `+12000 Hz` (`> fs/8 = 10000 Hz`)
+  returns the wrapped principal value `-8000 Hz` with high coherence.
+  That is not successful recovery of the true offset.
+- AWGN (deterministic noise seeds 1-3, true leftover 5 Hz), worst
+  leftover errors and coherence:
+
+```text
+bpsk  20 dB: 0.84 Hz, coherence ~0.961
+bpsk  10 dB: 9.33 Hz, coherence ~0.70
+bpsk   0 dB: 166 Hz,  coherence ~0.14  (passes default threshold)
+qpsk  20 dB: 1.93 Hz, coherence ~0.856
+qpsk  10 dB: 36.5 Hz, coherence ~0.29
+qpsk   0 dB: thousands of Hz, coherence ~0.004–0.007 (rejected)
+```
+
+  Asserted only: BPSK 20/10 dB and QPSK 20 dB, with gates above the
+  measured worst errors. 10 dB QPSK and 0 dB were characterized and
+  deliberately not used as pass gates. Fourth-power lag-1 degrades
+  quickly; default `min_coherence` does not reject every poor estimate
+  (BPSK 0 dB is the recorded example). No universal low-SNR robustness
+  is claimed. This AWGN limitation is not evidence for a PLL: the
+  motivating leftover is a constant frequency on a clean rectangular
+  block, which 11C removes.
+- Pure noise: this N=65536 record is rejected by the default threshold
+  (coherence 0.0020 / 0.0025). Diagnostic mode (`min_coherence=0`) on
+  N=4096 exposes low coherence (0.0061 / 0.0069). These are recorded
+  diagnostic cases, not a claim that `min_coherence` rejects every
+  unstructured or mismatched signal.
+
+### Automated validation
+
+- focused residual-frequency tests: 90 passed
+- related regressions (coarse CFO estimation/correction, static phase
+  estimation/correction, impairments, modulation, demodulation,
+  waveform): 261 passed
+- full suite: 791 passed, 0 failed, 0 skipped (baseline 701 + 90 new)
+
+### Scope limitation
+
+Constant residual CFO, known rectangular IQWAV BPSK/QPSK (oversampled
+rectangular integer-SPS or ideal symbol-rate samples), one-shot block
+estimate only. Not carrier tracking, not a Costas loop, not a PLL, not
+timing recovery, not AMR, not pulse-shaped PSK. The unambiguous range is
+`[-fs/(2M), fs/(2M))`. Coherence is not calibrated confidence.
+
+### Next Module 11 milestone
+
+Symbol timing recovery remains the remaining synchronization stage
+(coarse CFO, residual-frequency refinement, and static carrier phase
+are now done). Costas/PLL stay parked unless later evidence shows
+constant residual-frequency correction is insufficient.
+
+---
+
 ## 2026-09-05 — Module 11B: blind static carrier phase estimation and correction
 
 ### Scope

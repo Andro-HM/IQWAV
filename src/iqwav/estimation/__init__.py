@@ -8,6 +8,10 @@ from .occupied_bandwidth import (
     estimate_occupied_bandwidth,
 )
 from .phase_offset import PhaseOffsetEstimate, estimate_phase_offset
+from .residual_frequency import (
+    ResidualFrequencyOffsetEstimate,
+    estimate_residual_frequency_offset,
+)
 from .spectral_peak import PeakFrequencyEstimate, estimate_peak_frequency
 from .symbol_grid import (
     RectangularSymbolGridEstimate,
@@ -22,6 +26,7 @@ __all__ = [
     "PeakFrequencyEstimate",
     "PhaseOffsetEstimate",
     "RectangularSymbolGridEstimate",
+    "ResidualFrequencyOffsetEstimate",
     "SNREstimate",
     "SymbolRateEstimate",
     "detect_occupied_bands",
@@ -31,5 +36,6 @@ __all__ = [
     "estimate_peak_frequency",
     "estimate_phase_offset",
     "estimate_rectangular_symbol_grid",
+    "estimate_residual_frequency_offset",
     "estimate_symbol_rate",
 ]
