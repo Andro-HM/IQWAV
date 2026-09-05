@@ -16,6 +16,159 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-05 — Module 11B: blind static carrier phase estimation and correction
+
+### Scope
+
+Implemented only:
+
+- blind constant phase-offset estimation for IQWAV BPSK/QPSK
+- caller-supplied constant phase correction
+
+Not implemented, deliberately: Costas loop, PLL, dynamic phase tracking,
+timing recovery, Gardner/Mueller-Muller, interpolation, AMC/AMR,
+pipeline integration, and any Sayan post-Snapshot-B work.
+
+### Architecture
+
+The existing inject/measure/remove separation is preserved:
+
+```text
+dsp.apply_phase_offset()             = inject known phase impairment (existing, untouched)
+estimation.estimate_phase_offset()   = estimate unknown static phase (new)
+synchronization.correct_phase_offset() = remove supplied static phase (new)
+```
+
+Public APIs:
+
+- `estimate_phase_offset(samples, modulation, *, min_symmetry=0.05)`
+  returning a frozen `PhaseOffsetEstimate(phase_offset_rad, symmetry)`
+- `correct_phase_offset(samples, phase_offset_rad)` performing only
+  `y[n] = x[n] * exp(-j * phase_offset_rad)`, complex128, new array,
+  exact inverse of `apply_phase_offset`
+
+The estimator needs no `samples_per_symbol`, no known timing and no
+symbol-boundary recovery; it works on rectangular oversampled waveforms
+and equally on already-extracted symbol-rate samples.
+
+### Estimator mathematics
+
+M-th-power moment with canonical constellation-reference compensation:
+
+```text
+compensated_moment = mean(x**M) * conj(c_M)
+phi_hat            = angle(compensated_moment) / M
+```
+
+- BPSK: M = 2, `c_M = +1` (symbols are +1/-1, so `s**2 = +1`), i.e.
+  `phi_hat = angle(mean(x**2)) / 2`
+- QPSK: M = 4, `c_M = -1` (the Gray mapper places every symbol at
+  `pi/4 + k*pi/2`, so `s**4 = -1`), i.e. estimation from `-mean(x**4)`
+
+The `-1` QPSK fourth-power reference was verified symbol by symbol:
+every canonical ideal symbol satisfies `s**4 == -1` within 4.4e-16. A
+naive uncompensated `angle(mean(x**4))/4` reports `pi/4`
+(0.785398163 rad measured) on zero-phase IQWAV QPSK — the fixed
+constellation-orientation bias the compensation removes. A dedicated
+zero-phase regression test guards against this bug.
+
+Canonical returned ranges use explicit deterministic wrapping (not
+`np.angle`'s branch choice at +/-pi):
+
+```text
+BPSK: [-pi/2, +pi/2)   observable modulo pi
+QPSK: [-pi/4, +pi/4)   observable modulo pi/2
+```
+
+### Reliability measure
+
+```text
+symmetry = abs(mean(x**M)) / mean(abs(x)**M)
+```
+
+computed on magnitude-normalized samples (the positive real
+normalization leaves phase and ratio unchanged while preventing
+overflow/underflow). Bounded in [0, 1]: 1 when all `x**M` share one
+phase, order `1/sqrt(N)` for pure noise. It is a symmetry/concentration
+reliability measure only — NOT calibrated confidence and NOT SNR.
+`min_symmetry=0.05` follows the existing HM estimator threshold style
+(matching `min_coherence`); 0 is allowed for diagnostic use. No
+threshold was tuned to make tests pass.
+
+### Scientific validation
+
+- Clean BPSK/QPSK: exact recovery (~1e-16) for zero, positive,
+  negative, outside-canonical and near-boundary phases; symmetry
+  exactly 1.0; boundary cases (+pi/2, +pi/4) wrap deterministically.
+- Estimate -> correct proof: the PRIMARY truth is the independent
+  reference-ratio measurement `angle(mean(corrected/clean))` wrapped
+  modulo pi (BPSK) / pi/2 (QPSK). Re-running the same estimator after
+  correction is kept only as an explicitly labeled self-consistency
+  check (the Module 11A lesson is deliberately not repeated).
+- Rotational ambiguity demonstrated concretely: for true phase 0.8 the
+  QPSK estimate returned `0.8 - pi/2` and correction produced
+  `j * clean` — a valid constellation with different bits. Absolute
+  bit labeling cannot be recovered from PSK rotational symmetry alone;
+  pilots, differential coding, framing or known headers are needed.
+- CFO isolation (correct TRUE CFO first, then estimate phase): exact
+  for both modulations.
+- BPSK coarse-CFO integration: exact (the lag-1 CFO estimator is
+  essentially exact on this deterministic BPSK block).
+- QPSK coarse-CFO integration: REJECTED by the reliability threshold
+  (symmetry 0.0323). The known +4.433 Hz finite-record lag-1 bias
+  (Module 11A) rotates the constellation through many cycles over the
+  0.4096 s block. Documented as instability: Module 11B correctness
+  does NOT depend on the CFO estimator being exact.
+- Residual-CFO degradation characterized: CFO knowledge stale by 5 Hz
+  over a 0.2048 s block (about one full constellation rotation)
+  collapses symmetry from 1.0 to 0.023 and the default threshold
+  rejects the input. Characterized, not solved — no PLL in this
+  milestone.
+- AWGN (deterministic noise seeds 1-3, true phase 0.8), worst wrapped
+  errors and symmetry:
+
+```text
+bpsk  20 dB: 2.7e-4 rad, symmetry ~0.990
+bpsk  10 dB: 1.1e-3 rad, symmetry ~0.909
+bpsk   0 dB: 5.6e-3 rad, symmetry ~0.50
+qpsk  20 dB: 6.0e-4 rad, symmetry ~0.961
+qpsk  10 dB: 1.1e-3 rad, symmetry ~0.70
+qpsk   0 dB: 1.5e-2 rad, symmetry ~0.14
+```
+
+  Also measured but deliberately NOT asserted: at -3 dB, BPSK stays
+  accurate (worst 1.1e-2 rad, symmetry ~0.33) while QPSK symmetry
+  drops to 0.054-0.068, near the default threshold. No universal
+  low-SNR robustness is claimed.
+- Pure noise: 65536-sample records are rejected by the default
+  threshold (symmetry 0.0024 / 0.0075); diagnostic mode (`min_symmetry=0`)
+  exposes explicitly low symmetry (0.018 / 0.044 at 4096 samples)
+  instead of presenting an arbitrary phase as truth.
+
+### Automated validation
+
+- focused phase-estimation tests: 73 passed
+- focused phase-correction tests: 27 passed
+- related regressions (impairments, CFO estimation/correction,
+  modulation, demodulation, waveform): 161 passed
+- full suite: 701 passed, 0 failed, 0 skipped (baseline 601 + 100 new)
+
+### Scope limitation
+
+Static, known-modulation, constant block phase only. Not carrier
+tracking, not a Costas loop, not a PLL, not timing recovery, not AMR.
+The M-th-power method assumes the modulation family is already known
+("bpsk"/"qpsk" only; arbitrary M-PSK is deliberately not advertised).
+The symmetry measure is not calibrated confidence.
+
+### Next Module 11 milestone
+
+Symbol timing recovery is the remaining synchronization stage in the
+Module 11 roadmap (CFO correction and static carrier phase are now
+done).
+
+---
+
 ## 2026-09-04 — Module 11A: controlled CFO correction integrated from Sayan snapshot B
 
 ### Source
