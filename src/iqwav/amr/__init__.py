@@ -32,6 +32,14 @@ from .evaluate import (
     shortcut_audit,
 )
 from .messages import MESSAGE_FAMILIES, generate_analog_message
+from .rule_based import (
+    AMCFeatures,
+    AMCResult,
+    PRIMARY_AMC_LABELS,
+    classify_amc_features,
+    classify_modulation,
+    extract_amc_features,
+)
 from .split import (
     DatasetSplit,
     combination_holdout,
@@ -44,6 +52,9 @@ from .split import (
 __all__ = [
     "LABELS",
     "MESSAGE_FAMILIES",
+    "PRIMARY_AMC_LABELS",
+    "AMCFeatures",
+    "AMCResult",
     "ClassificationReport",
     "DatasetSeeds",
     "DatasetSplit",
@@ -57,8 +68,11 @@ __all__ = [
     "accuracy_by_nuisance",
     "classifier_labels",
     "classifier_samples",
+    "classify_amc_features",
+    "classify_modulation",
     "combination_holdout",
     "evaluate_predictions",
+    "extract_amc_features",
     "filter_records",
     "filter_split",
     "generate_analog_message",

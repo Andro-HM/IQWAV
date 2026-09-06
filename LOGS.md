@@ -16,6 +16,55 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-06 — Module 12: frozen rule-based AMC baseline productionized
+
+### Delivered
+
+Added the production sample-only AMC API under `iqwav.amr`:
+
+- `extract_amc_features(samples) -> AMCFeatures`
+- `classify_modulation(samples) -> AMCResult`
+
+The primary outputs are `am / angle / bpsk / qpsk`. `angle` intentionally
+combines FM and PM because of the established in-domain FM/PM
+identifiability ambiguity. The classifier operates directly on
+unsynchronized complex IQ and uses no sample rate, SNR, SPS, CFO,
+timing, truth, or modulation metadata.
+
+The feature equations, corrected overlap-normalized positive
+transition periodicity, 8N M-power FFT statistic, strict frozen
+thresholds, and hierarchical routing were copied from the accepted 12D
+experiment without retuning or redesign. The API exposes feature and
+gate diagnostics only; it does not claim calibrated confidence.
+
+### Validation
+
+Added regression tests for strict threshold boundaries, fixed frozen
+feature references, direct experiment parity over deterministic 12C
+records, FM/PM output semantics, accepted amplitude/static-phase
+invariance, validation/degenerate inputs, deterministic calls, and
+input non-mutation.
+
+```text
+focused production AMC: 12 passed, 0 failed
+12C AMC + production AMC: 64 passed, 0 failed
+full suite: 1028 passed, 0 failed, 2 warnings
+```
+
+The two warnings occur only in the deliberate one-sample regression
+case, which preserves the experiment's guarded unavailable-periodicity
+behavior. The sealed test was not rerun during productionization, and
+no post-test fitting or model change occurred.
+
+### Boundary
+
+Module 12 — AMC baseline complete. This is a controlled synthetic
+rectangular-domain baseline only: its severe known 0 dB weakness remains,
+and it makes no OTA or universal AMC claim.
+
+
+---
+
 ## 2026-09-06 — Module 12D3: single sealed-test evaluation
 
 ### Provenance and frozen state
