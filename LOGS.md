@@ -16,6 +16,63 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-06 — Capture-level reconciliation primitives
+
+### Selective adaptation
+
+Adapted the approved Sayan design directions for activity hints, spectral
+candidate handling, baseband channel tuning, and structured capture
+survey results. Sayan's post-Snapshot-B objects were unavailable in the
+local refs, so no code was copied or merged wholesale. PARK decisions
+for Sayan timing, receiver, and parameter-estimation paths remain in
+force; HM synchronization and frozen AMC remain authoritative.
+
+### Added behavior and boundaries
+
+- `detect_activity(...)` uses local-window power and a lower-window
+  baseline estimate. It reports original sample coordinates and
+  sample-weighted region power. Continuous constant-power input may
+  produce no time activity and activity never gates spectral survey.
+- HM's existing `detect_occupied_bands(...)` remains the sole band
+  detector, extended with explicit guard expansion and minimum-bandwidth
+  filtering. Bands are signed baseband spectral regions of interest,
+  not transmitters or guaranteed isolated channels.
+- `extract_band(...)` translates a requested signed band to DC and
+  causally low-pass filters it. It returns original-band/translation
+  metadata, FIR delay, and the valid post-transient interval. It does
+  not estimate CFO, translate back to the original location, or decimate.
+- `survey_capture(...)` combines optional activity hints and spectral
+  candidates. Per-band extraction failures are explicit and do not erase
+  other candidate results.
+
+### AMC/channelization integration finding
+
+New deterministic 12C-generated records (45 total; AM/FM/PM/BPSK/QPSK,
+three parents x three variants) were translated by +6 kHz and extracted
+from 0..12 kHz with a 51-tap FIR. Before-versus-after frozen-AMC label
+agreement was **9/45**: AM 8/9, FM 0/9, PM 0/9, BPSK 0/9, QPSK 1/9.
+This is a blocking integration finding for assuming filtered extracted
+baseband is AMC-compatible. No AMC feature, threshold, label, or routing
+was changed; the sealed AMC test was not rerun.
+
+Follow-up A/B/C/D/E diagnosis reused those exact 45 records: raw samples,
++6 kHz translation, and the extractor's exact inverse translation had
+identical labels (45/45 agreement), while both complete 51-tap FIR output
+and its documented valid interval agreed with pre-FIR samples only 9/45.
+The two FIR inputs agreed 45/45. Therefore, in this controlled case the
+change is caused by the fixed FIR response rather than translation or the
+discardable startup interval; trimming reduced feature drift but did not
+restore any frozen-AMC labels. This is diagnostic evidence only, not a
+threshold, feature, routing, or extractor redesign.
+
+The result remains limited to this controlled experiment and does not
+identify a universal ordering for raw candidate slices versus filtered
+channels. It does establish that aggressive channelization must be
+validated before being placed ahead of frozen AMC.
+
+
+---
+
 ## 2026-09-06 — Module 12: frozen rule-based AMC baseline productionized
 
 ### Delivered

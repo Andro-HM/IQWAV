@@ -83,6 +83,8 @@ def detect_occupied_bands(
     nperseg: int | None = None,
     threshold_db: float = 6.0,
     min_bins: int = 3,
+    guard_hz: float = 0.0,
+    min_bandwidth_hz: float = 0.0,
 ) -> tuple[list[OccupiedBand], float]:
     """Detect spectral bands rising significantly above the noise floor.
 
@@ -139,6 +141,10 @@ def detect_occupied_bands(
         or min_bins < 1
     ):
         raise ValueError(f"min_bins must be an integer >= 1, got {min_bins!r}.")
+    for name, value in (("guard_hz", guard_hz), ("min_bandwidth_hz", min_bandwidth_hz)):
+        value = _validate_real_scalar(value, name)
+        if value < 0:
+            raise ValueError(f"{name} must be >= 0, got {value!r}.")
     if nperseg is not None and (
         not isinstance(nperseg, (int, np.integer)) or nperseg < 1
     ):
@@ -163,8 +169,10 @@ def detect_occupied_bands(
             continue
         peak_index = start + int(np.argmax(psd_db[start:end]))
         peak_db = float(psd_db[peak_index])
-        lower_hz = float(freqs[start] - df / 2.0)
-        upper_hz = float(freqs[end - 1] + df / 2.0)
+        lower_hz = max(-fs / 2.0, float(freqs[start] - df / 2.0 - guard_hz))
+        upper_hz = min(fs / 2.0, float(freqs[end - 1] + df / 2.0 + guard_hz))
+        if upper_hz - lower_hz < min_bandwidth_hz:
+            continue
         bands.append(
             OccupiedBand(
                 lower_hz=lower_hz,
