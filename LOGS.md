@@ -16,6 +16,328 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-06 — Module 12D: transition-periodicity correction and development rerun
+
+### Scope
+
+Corrected only the private experimental `transition_periodicity` helper
+in `scripts/_exp_12d1.py`. This supersedes the periodicity mathematics
+and numerical 12D2 results in the entries below; those entries remain
+historical pre-correction evidence.
+
+The corrected feature uses residual phase-step magnitudes `q`:
+
+```text
+e = q**2
+z = e - mean(e)
+for k = 2 .. min(32, len(z)-1):
+    a = z[:-k]; b = z[k:]
+    rho_k = dot(a,b) / sqrt(dot(a,a)*dot(b,b))
+    rho_k = 0 when the denominator is numerically negligible
+periodicity = max(0, max(rho_k))
+```
+
+The phase guard, RMS preprocessing, `Ev`, coherence, sparsity, C2,
+C4, C2/C4, FFT padding, labels, candidate families, and advancement
+criteria were unchanged. No production classifier or FM/PM rule was
+added.
+
+### Same original development data, old versus corrected periodicity
+
+Train+validation only, original seeds `(101,202,303,404)`, N=256:
+
+```text
+             old (mean / median / p05 / p95)     corrected
+am       0.16157 / 0.17399 / -0.14263 / 0.35692  0.19783 / 0.18198 / 0.08739 / 0.36090
+angle    0.08590 / 0.13841 / -0.17116 / 0.37081  0.18196 / 0.15425 / 0.07971 / 0.44154
+bpsk     0.39568 / 0.44096 /  0.12339 / 0.61192  0.43895 / 0.47015 / 0.14773 / 0.66499
+qpsk     0.41396 / 0.47257 /  0.12020 / 0.62476  0.45842 / 0.51917 / 0.14690 / 0.68519
+```
+
+### Corrected TRAIN fit and frozen validation selection
+
+```text
+A  coherence OR Ev: thresholds (0.148882, 0.247983), train BA 0.9515, val BA 0.9500
+B  sparsity OR periodicity: thresholds (0.436124, 0.599625), train BA 0.8794, val BA 0.8929
+C  C2 OR C2/C4: thresholds (0.414145, 2.847400), train BA 1.0000, val BA 1.0000
+```
+
+Validation four-class: accuracy 0.8857, BA 0.8679; recalls AM 0.9143,
+angle 0.9571, BPSK 0.8000, QPSK 0.8000. Independent node BA: A 0.9500,
+B 0.8929, C 1.0000.
+
+Fresh-seed development (seeds `(1001,2002,3003,4004)`, no refit,
+train+validation): accuracy 0.8700, BA 0.8469; recalls AM 0.8750,
+angle 0.9625, BPSK 0.7833, QPSK 0.7667. Node BA: A 0.9302, B 0.8812,
+C 1.0000.
+
+Length robustness (fresh seeds, no refit): N=128 BA 0.7990, N=256 BA
+0.8438, N=512 BA 0.8615. N=128 remains characterization.
+
+Validation SNR BA: 0 dB 0.3929 (characterization), 5 dB 0.9643,
+10 dB 1.0000, 15 dB 0.9821, 20 dB 1.0000. Thus the >=5 dB condition
+does not collapse.
+
+### Gate and sealed-test discipline
+
+The unchanged development gate PASSed: validation BA and fresh-seed BA
+are >=0.80, all primary recalls are >=0.65, every essential node BA is
+>=0.80, and all validation SNR buckets >=5 dB exceed the declared
+non-collapse threshold. 0 dB and N=128 did not trigger retuning.
+
+Only TRAIN and VALIDATION records were featurized, fit, selected, and
+evaluated. The sealed original test records were not featurized,
+summarized, evaluated, or used for thresholds; no sealed-test run was
+performed.
+
+
+---
+
+## 2026-09-06 — Module 12D2: train/validation physics-rule fit
+
+### Decision
+
+No production `classify_modulation()`, no ML, no FM/PM production
+split, sealed test unused. 12D1 feature mathematics were reused
+unchanged. Three hierarchical nodes were fit independently on TRAIN
+true-label subsets; validation selected frozen families without
+refitting thresholds.
+
+Primary labels: `am / angle / bpsk / qpsk`. Original `fm`/`pm` kept
+only as diagnostics.
+
+### Predeclared search
+
+Candidate thresholds: adjacent unique midpoints, falling back to a
+101-point quantile grid if more than 128 unique values.
+
+Tie-break (declared before search): max node balanced accuracy, then
+simpler family (single, then AND, then OR in listed order), then
+larger margin from class medians, then smaller t1, t2.
+
+Nuisance metadata was not used to choose thresholds.
+
+### TRAIN-selected then VAL-chosen rules
+
+```text
+A  coherence OR Ev
+   coh > 0.148882  OR  Ev > 0.247983
+   train node BA 0.9515   val node BA 0.9500
+
+B  sparsity AND periodicity   (after AM gate)
+   spars > 0.376444  AND  per > 0.153226
+   train node BA 0.8971   val node BA 0.9000
+
+C  C2 OR C2/C4                (PSK branch only; C4 not used alone)
+   C2 > 0.414145  OR  C2/C4 > 2.847400
+   train node BA 1.0000   val node BA 1.0000
+```
+
+Original 12D1 seeds (101,202,303,404), N=256, 30 parents x 5 variants.
+750 records; train 425 / val 175 / test 150 sealed.
+
+### VALIDATION four-class (frozen)
+
+```text
+acc 0.8914   BA 0.8857
+confusion (true \ pred am angle bpsk qpsk)
+  am     32  3  0  0
+  angle   2 64  3  1
+  bpsk    0  4 31  0
+  qpsk    0  6  0 29
+recall  am 0.91  angle 0.91  bpsk 0.89  qpsk 0.83
+```
+
+### Fresh-seed development (no refit)
+
+Seeds (1001,2002,3003,4004), same size, train+val n=600:
+
+```text
+acc 0.8733   BA 0.8625
+recall  am 0.875  angle 0.917  bpsk 0.842  qpsk 0.817
+node BA  A 0.930  B 0.885  C 1.000
+fresh val-only BA 0.8786
+```
+
+### Length / SNR
+
+Frozen rules, fresh seeds, train+val n=600:
+
+```text
+N=128  BA 0.790  (below 0.80; shorter-record degradation)
+N=256  BA 0.843
+N=512  BA 0.860
+```
+
+Original val SNR:
+
+```text
+0 dB   BA 0.518  acc 0.600   characterization; qpsk R=0.14
+5 dB   BA 0.946
+10 dB  BA 1.000
+15 dB  BA 0.964
+20 dB  BA 1.000
+```
+
+FM/PM diagnostic: most true fm/pm map to angle (val 33/35 and 31/35).
+No FM/PM rule was fit.
+
+### Research advancement gate
+
+PASS on the predeclared criteria (not a product spec):
+
+- val BA 0.886 and fresh-dev BA 0.863 both >= 0.80
+- no primary recall < 0.65 on those two evaluations
+- each node BA >= 0.80
+- SNR >= 5 dB does not collapse
+
+0 dB fails, as allowed. N=128 is a robustness finding, not part of
+the gate. Sealed test was not opened.
+
+### Files
+
+- `scripts/_exp_12d2.py`
+- `scripts/exp_12d2_rule_fit.py`
+
+### Next
+
+Production `classify_modulation()` and sealed test evaluation only
+when HM asks. Do not retune thresholds by SNR or record length
+without a new bounded experiment.
+
+---
+
+## 2026-09-06 — Module 12D1: experimental features and FM/PM identifiability
+
+### Decision
+
+No production classifier, no thresholds, no public AMC API. 12D1 is
+an experiment: an exact FM/PM identity construction plus private
+feature extraction on the 12C harness. Primary scientifically
+defensible label space is `am / angle / bpsk / qpsk` with `angle =
+fm+pm`. Original `fm`/`pm` labels are retained only as diagnostics.
+
+### A. FM/PM exact identity
+
+Under the IQWAV contract `phi_FM[n] = k * cumsum(m_f)[n]`, a
+normalized sinusoid PM message `m_p` with `beta=0.8`, `f_norm=0.04`
+(inside accepted ranges) yields an FM message
+
+```text
+m_f[0] = 0
+m_f[n] = (m_p[n]-m_p[n-1]) / A     n>=1
+k = 2 pi * delta_f_norm = beta * A
+```
+
+so `phi_FM[n] = beta*(m_p[n]-m_p[0]) = phi_PM[n] - beta m_p[0]`.
+
+N=4096, fs=48 kHz, A=0.25017, delta_f_norm=0.03185:
+
+```text
+increment identity max|err|          2.8e-17
+before phase compensation max |s_fm-s_pm|  0.779
+after  phase compensation max |err|        1.2e-14
+                              RMS          6.6e-15
+same amp/CFO + identical AWGN max |err|    2.0e-14
+```
+
+FM and PM differ only by a constant phase on this construction.
+They cannot be universal separate production AMC outputs on the
+unrestricted message domain.
+
+### Precise experimental features
+
+Private helpers in `scripts/_exp_12d1.py`. RMS-normalize
+`r = x / sqrt(mean(|x|^2))`; reject zero power; do not subtract the
+complex mean.
+
+- `Ev`: `var(|r|) / (mean(|r|)^2 + eps)` (ddof=0)
+- envelope lag-1 coherence: Pearson of centered `|r|`; zero-variance
+  envelope returns 0.0
+- phase sparsity: `1 - median(|dphi|) / (rms(|dphi|)+eps)` after
+  removing the common circular direction of guarded adjacent products;
+  residual RMS ~ 0 returns 0.0
+- transition periodicity: max Pearson lag-k autocorrelation of
+  residual-step energy, lags 2..32 (covers SPS 4/8/16). Does not call
+  `estimate_symbol_rate` or `estimate_rectangular_symbol_grid`.
+  Zero-variance energy returns 0.0
+- `C2`, `C4`: `max|FFT(u**M, 8N)|^2 / (N sum |u**M|^2)` on
+  phase-normalized `u`; not `estimate_residual_frequency_offset`
+- `C2/(C4+eps)` derived diagnostic
+
+### C. Invariance (clean paired copies)
+
+Amplitude x2.5 and static phase 0.8 rad: all features invariant.
+
+Moderate CFO (`0.005 fs`): envelope, sparsity, and periodicity
+invariant. `C2`/`C4`/`C2/C4` are **not** strictly invariant (~1% C2
+drop from M-th-power tone leaving the padded FFT bin). Reported, not
+silently retuned.
+
+### D. Train+validation campaign
+
+12C harness, `n_parents=30`, `n_variants=5`, N=256, seeds
+(101, 202, 303, 404). 750 records; train 425 / val 175 / test 150
+**sealed unused**. Development n=120 per generated class.
+
+Primary four-class medians (train+val):
+
+```text
+             Ev     coh    spars   per     C2      C4     C2/C4
+am         0.150   0.577   0.423   0.174   0.734   0.349   2.10
+angle      0.046   0.000   0.335   0.138   0.244   0.062   2.67
+bpsk       0.047  -0.012   0.707   0.441   0.804   0.424   1.88
+qpsk       0.045   0.005   0.664   0.473   0.070   0.436   0.28
+```
+
+FM vs PM medians almost overlap on Ev and sparsity; C2 differs in
+location but not as a separable production pair. No FM/PM threshold.
+
+### E. Ablation (no classifier)
+
+- AM vs rest: envelope coherence is the useful cue. Ev-only 5/95 gap
+  is negative (overlap). At 0 dB AM coherence collapses (median 0.05).
+- Angle vs PSK: both sparsity and periodicity shift (~0.35 median);
+  neither has a 5/95 gap. Evidence is joint, not one feature.
+- BPSK vs QPSK: C2 and C2/C4 carry the evidence. C4 does not
+  (BPSK and QPSK C4 match). C4 (and C2) collapse at 0 dB (~0.027).
+- SPS: sparsity falls slowly as SPS increases (fewer transitions per
+  block). Not a class-specific catalog. QPSK C2 rises mildly with SPS.
+- Message family: AM Ev higher for tone than bandlimited; angle Ev
+  stable. Record length was fixed at 256, so length keying was not
+  tested.
+
+### Verdicts
+
+```text
+envelope_coherence     KEEP   (AM vs rest; SNR-fragile at 0 dB)
+envelope_dispersion    MODIFY (SNR-dominated; supporting only)
+phase_sparsity         KEEP   (angle vs PSK, after AM)
+transition_periodicity KEEP   (supporting; with sparsity)
+C2                     KEEP   (BPSK vs QPSK; not CFO-exact)
+C4                     DROP as BPSK/QPSK separator; KEEP as
+                       PSK-vs-angle / SNR diagnostic
+C2/C4                  KEEP   (BPSK vs QPSK ratio; SNR-fragile)
+```
+
+Four-class hierarchy appears **feasible** as a later staged rule, not
+as fitted thresholds from this run: envelope (AM) then sparsity/
+periodicity (angle vs PSK) then C2 / C2/C4 (BPSK vs QPSK). Five-way
+fm/pm production classification is not supported.
+
+### Files
+
+- `scripts/_exp_12d1.py`
+- `scripts/exp_12d1_amc_features.py`
+
+### Next
+
+Do not fit production thresholds or open the sealed test split until
+HM asks. Any later C2/C4 CFO robustness is a MODIFY, not a silent
+retune.
+
+---
+
 ## 2026-09-06 — Module 12C: reject cross-label group_id
 
 `split_records` now verifies, before class-stratified assignment, that
