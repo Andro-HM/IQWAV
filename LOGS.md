@@ -16,6 +16,93 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-06 — Module 12D3: single sealed-test evaluation
+
+### Provenance and frozen state
+
+This was the **one sealed-test opening** authorized for Module 12D3.
+The pre-test frozen commit was:
+
+```text
+f7d0121729df98fcdbfa45aa0b8184edc708bc7d
+```
+
+The original group-aware split yielded 150 sealed records from 30
+parent groups, with zero train/test and validation/test group overlap.
+Primary labels were `am / angle / bpsk / qpsk`, where `angle` merges
+the original FM and PM truth labels.
+
+No post-test fitting, threshold selection, retuning, routing change,
+feature change, or model change occurred. This entry documents the
+already-completed evaluation only.
+
+### Sealed primary result
+
+```text
+accuracy            0.8533
+balanced accuracy   0.8417
+
+confusion (rows truth / columns prediction: am, angle, bpsk, qpsk)
+[[26, 4, 0, 0],
+ [ 1,54, 3, 2],
+ [ 0, 5,25, 0],
+ [ 0, 7, 0,23]]
+
+recall
+am       0.8667
+angle    0.9000
+bpsk     0.8333
+qpsk     0.7667
+```
+
+Independent truth-population node balanced accuracy:
+
+```text
+A  AM vs rest       0.9292
+B  PSK vs ANGLE     0.8583
+C  BPSK vs QPSK     1.0000
+```
+
+### Diagnostics
+
+Sealed SNR balanced accuracy:
+
+```text
+0 dB    0.3750
+5 dB    0.8542
+10 dB   0.9792
+15 dB   1.0000
+20 dB   1.0000
+```
+
+The 0 dB bucket is a severe known weakness. FM and PM remain merged as
+ANGLE because of the established identifiability ambiguity: FM maps to
+angle for 27/30 records and PM maps to angle for 27/30 records. No
+FM-vs-PM classifier was created.
+
+Frozen development comparison:
+
+```text
+validation BA       0.8679
+fresh-dev BA        0.8469
+sealed BA           0.8417
+```
+
+Group bootstrap, resampling parent groups only: 2,000 resamples with
+seed 1203, 95% intervals:
+
+```text
+accuracy  [0.8133, 0.8933]
+BA        [0.7955, 0.8828]
+```
+
+This result applies only to the current controlled synthetic
+rectangular domain. It does not establish universal or OTA AMC
+robustness.
+
+
+---
+
 ## 2026-09-06 — Module 12D: transition-periodicity correction and development rerun
 
 ### Scope
