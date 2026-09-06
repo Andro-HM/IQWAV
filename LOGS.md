@@ -16,6 +16,236 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-06 — Module 12C: reject cross-label group_id
+
+`split_records` now verifies, before class-stratified assignment, that
+every `group_id` belongs to exactly one label. Same-label sibling
+variants remain valid and stay together. The same `group_id` under
+two labels is `ValueError`; grouping was not redesigned.
+
+`evaluate_predictions` empty truth is rejected (no balanced-accuracy
+result). For non-empty evaluation, balanced accuracy is mean recall
+over classes with nonzero truth support. `FieldSummary.counts` are
+absolute occurrence counts.
+
+- focused 12C: 52 passed
+- related AMR/modulation regressions: 301 passed
+- full suite: 1016 passed, 0 failed, 0 skipped
+
+---
+
+## 2026-09-06 — Module 12C audit fixes: group-safe holdout and stronger audit
+
+### Decision
+
+Keep the 12C harness. No classifier. Fixes only: combination-holdout
+protocol, duplicate `record_id` rejection, richer shortcut audit, and
+evaluation-doc clarity.
+
+### Fixes
+
+Canonical combination holdout is now explicit:
+
+```text
+split groups first
+→ filter nuisances inside train/validation/test
+→ combination_holdout rejects any remaining shared parent
+```
+
+`filter_records` remains a low-level partition and is documented as
+unsafe if used before splitting and then treating kept/held as
+development/holdout. A regression test reconstructs that leaky
+filter-before-split case (shared parents) and proves
+`combination_holdout` after a group-aware split has zero shared
+parents.
+
+`split_records` rejects duplicate `record_id` values. Split fractions
+apply to groups, not records. Group IDs still assume information
+realizations are not shared across labels.
+
+`shortcut_audit` reports discrete frequency tables (SNR, SPS, record
+length, message family) and continuous count/min/max/mean for
+amplitude, phase, and CFO. Identical support with different
+frequencies is flagged. This remains an audit, not a hypothesis test.
+
+`accuracy_by_nuisance` returns `NuisanceBucket(accuracy, n)`. Balanced
+accuracy is the mean of per-class recall over classes with at least
+one true sample; zero-truth-support classes are excluded from that
+mean.
+
+FM/PM full-domain scores must later be accompanied by evaluation in
+an overlapping effective-excursion region. Parameter ranges were not
+changed.
+
+### Public API additions
+
+```python
+filter_split(split, predicate)
+combination_holdout(split, development=..., holdout=...)
+NuisanceBucket(accuracy, n)
+accuracy_by_nuisance(...) -> dict[key, NuisanceBucket]
+```
+
+### Automated validation
+
+- focused 12C: 49 passed
+- related modulation/impairment regressions: 249 passed
+- full suite: 1013 passed, 0 failed, 0 skipped
+  (previous 12C baseline 1007, plus 6 new/adjusted tests net +6)
+
+### Next
+
+Classifier comparison only when HM asks, using split-then-holdout and
+`classifier_samples`.
+
+---
+
+## 2026-09-06 — Module 12C: leakage-safe synthetic AMC harness
+
+### Decision
+
+Module 12C is dataset generation, group-aware splitting, and
+classifier-independent evaluation only. No AMC classifier, rule
+threshold, classical ML, or neural network was added. Public-dataset
+loading and Module 11 integration were not added.
+
+Accepted classes: `am` (DSB-LC), `fm`, `pm`, `bpsk`, `qpsk`.
+
+### Architecture
+
+```text
+amr.generate_synthetic_dataset(config)
+    = labelled IQ records from production modulators + DSP impairments
+
+amr.split_dataset(dataset) / split_records(records)
+    = group-aware train/validation/test, no shared group_id
+
+amr.filter_records(records, predicate)
+    = combination-holdout hook (SNR, SPS, message-frequency band, ...)
+
+amr.evaluate_predictions(y_true, y_pred)
+    = confusion matrix, accuracy, balanced accuracy, per-class P/R/F1
+
+amr.shortcut_audit(records)
+    = per-class nuisance support screen
+```
+
+Message generation lives in `amr.messages`, not in the production
+modulators. Amplitude scaling is applied in the harness as a multiply;
+CFO, phase, and AWGN reuse `dsp` primitives.
+
+### Group IDs
+
+A parent is one information realization:
+
+- digital: one bit payload
+- analog: one normalized message
+
+```text
+group_id  = {label}:p{parent_index:06d}
+record_id = {group_id}:v{variant_index:04d}
+```
+
+Crops, noise draws, and other nuisances keep the parent `group_id`.
+One group is assigned to exactly one of train/validation/test. Split
+assignment sorts group IDs, then shuffles with the split seed, so
+record order is not a correctness dependency.
+
+### Seed streams
+
+Independent `DatasetSeeds`: `payload`, `nuisance`, `awgn`, `split`.
+Each generation stream is spawned per class from `SeedSequence` so
+AM message draws cannot fingerprint BPSK bits. Same config + same
+seeds reproduce IQ and metadata bit-for-bit.
+
+### Default nuisance catalogs
+
+Shared across applicable classes:
+
+```text
+fs                      = 48000 Hz
+n_samples_values        = (256,)
+snr_db_values           = (0, 5, 10, 15, 20)
+amplitude_range         = (0.5, 2.0)
+phase_range             = (-π, π)
+cfo_norm_range          = (-0.02, 0.02)
+cfo_hz                  = cfo_norm * fs
+sps_values              = (4, 8, 16)          # BPSK and QPSK
+analog_message_families = tone, multi_tone, bandlimited
+analog_freq_norm_range  = (0.01, 0.08)
+modulation_index_range  = (0.3, 0.9)
+fm_deviation_norm_range = (0.02, 0.08)        # Δf = norm * fs
+pm_phase_deviation_range= (0.4, 1.2)
+```
+
+CFO is a normalized cycles-per-sample nuisance, not the 11A PSK
+ambiguity range. Discrete catalogs are indexed by a class-independent
+parent/variant slot.
+
+### Public API
+
+```python
+generate_synthetic_dataset(config) -> SyntheticDataset
+classifier_samples(records)        # IQ only
+classifier_labels(records)
+split_dataset(dataset, fractions=(0.6, 0.2, 0.2), seed=None)
+split_records(records, fractions=..., seed=...)
+filter_records(records, predicate)
+evaluate_predictions(y_true, y_pred, labels=LABELS)
+accuracy_by_nuisance(records, y_true, y_pred, field)
+shortcut_audit(records)
+generate_analog_message(...)       # harness-only
+```
+
+`NuisanceMetadata` is audit/reporting truth. It is not a classifier
+feature vector.
+
+### Shortcut audit (60-record probe)
+
+6 parents × 2 variants × 5 classes, `fs=8 kHz`, `N=64`:
+
+```text
+am/fm/pm  snr {5,10,15}  n={64}  families={tone, multi_tone, bandlimited}
+bpsk/qpsk snr {5,10,15}  n={64}  sps={4,8}
+mismatches: none
+split: train 30 / validation 20 / test 10
+```
+
+### Files
+
+- `src/iqwav/amr/__init__.py`
+- `src/iqwav/amr/messages.py`
+- `src/iqwav/amr/dataset.py`
+- `src/iqwav/amr/split.py`
+- `src/iqwav/amr/evaluate.py`
+- `tests/unit/test_amr_messages.py`
+- `tests/unit/test_amr_dataset.py`
+- `tests/unit/test_amr_split.py`
+- `tests/unit/test_amr_evaluate.py`
+
+### Automated validation
+
+- focused 12C: 43 passed
+- related modulation/impairment regressions: 249 passed
+- full suite: 1007 passed, 0 failed, 0 skipped
+  (previous accepted analog-modulator baseline 964, plus 43 Module 12C tests)
+
+### Scope limitation
+
+Tier A synthetic IQWAV records only. Not public-dataset validation,
+not real OTA AMC, not RRC/pulse-shaped digital robustness, not
+multipath/fading, not fractional timing, not open-set recognition.
+A single-tone analog family exists for analytical checks but is not
+the only message family. Shortcut audit is a support screen, not a
+hypothesis test. No classifier was trained or claimed.
+
+### Next
+
+Classifier comparison only when HM asks, using this harness and
+`classifier_samples` so ground-truth nuisances are not features.
+
+---
+
 ## 2026-09-06 — Analog AM/FM/PM complex-baseband modulators
 
 ### Decision
