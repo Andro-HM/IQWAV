@@ -16,6 +16,107 @@ Newest entries should be added at the top below this introduction.
 
 ---
 
+## 2026-09-06 — Analog AM/FM/PM complex-baseband modulators
+
+### Decision
+
+The first Module 12 implementation prerequisite is a bounded analog
+modulator set, not a classifier. Production primitives are conventional
+carrier-present AM (DSB-LC), FM, and PM at complex baseband. Message
+generation stays with the caller. CFO, AWGN, amplitude scaling, and
+static carrier phase remain the existing separate impairment primitives.
+
+No dataset harness, features, ML model, or neural network was added.
+
+### Architecture
+
+```text
+modulation.am_modulate(message, modulation_index)
+    = s[n] = 1 + μ m[n]   (IQ, Q = 0)
+
+modulation.fm_modulate(message, fs, frequency_deviation_hz)
+    = s[n] = exp(j φ[n]) with discrete FM integration
+
+modulation.pm_modulate(message, phase_deviation_rad)
+    = s[n] = exp(j β m[n])
+```
+
+Existing `demod.fm_demodulate` is unchanged. Digital BPSK/QPSK
+modulators, tone generators, and `dsp` impairments are unchanged.
+
+### Frozen conventions
+
+Shared message contract: 1-D real finite `m`, `|m[n]| <= 1`.
+
+AM: `0 <= μ <= 1`. Envelope equals `1 + μ m` and is stored as
+complex128 with imag = 0. Carrier amplitude is 1.
+
+FM, with `φ[-1] = 0`:
+
+```text
+φ[n] - φ[n-1] = 2π (Δf / Fs) m[n]
+s[n] = exp(j φ[n])
+```
+
+so `φ[n] = 2π (Δf / Fs) cumsum(m)[n]`. Peak deviation satisfies
+`0 <= Δf < Fs/2`. Instantaneous frequency at sample `n` is `Δf m[n]`.
+
+`fm_demodulate` edge/scale convention under this contract, when the
+increment magnitude is below `π`:
+
+```text
+angle(s[n+1] conj(s[n])) = 2π (Δf / Fs) m[n+1]
+```
+
+It recovers `m[1:]` in radians/sample, not `m[:-1]` and not the full
+`m`. A constant message `m[n] = c` is a tone at `c Δf` whose sample 0
+is `exp(j 2π Δf c / Fs)` rather than `1`; that constant phase is the
+cumsum initial-condition, not `apply_phase_offset`.
+
+PM: `φ[n] = β m[n]`, `β >= 0`, no integration. Adjacent phase
+differences equal `β (m[n] - m[n-1])` and are not proportional to
+`m[n]` in general. That distinguishes the PM contract from FM. It is
+not an AMC identifiability result.
+
+### Public API
+
+```python
+am_modulate(message, modulation_index) -> complex128
+fm_modulate(message, fs, frequency_deviation_hz) -> complex128
+pm_modulate(message, phase_deviation_rad) -> complex128
+```
+
+### Files
+
+- `src/iqwav/modulation/analog.py`
+- `src/iqwav/modulation/__init__.py`
+- `tests/unit/test_analog_modulation.py`
+
+### Automated validation
+
+- focused analog modulators: 103 passed
+- related analog/DSP regressions (demod, tones, impairments, noise,
+  digital modulation, waveform, filters, spectrum, PSD): 216 passed
+- full suite: 964 passed, 0 failed, 0 skipped
+  (previous accepted 11D baseline 861, plus 103 analog-modulator tests)
+
+### Scope limitation
+
+Analytical checks used controlled arrays and simple tones only.
+These primitives generate ideal complex-baseband AM/FM/PM. They do
+not identify modulation, do not prove FM vs PM AMC separability, and
+do not establish real-world RF robustness. Overmodulation, DSB-SC,
+SSB, analog QAM, pre-emphasis, and message generation are out of
+scope.
+
+### Next
+
+Further AMC prerequisites (additional analog families, digital
+waveforms already present, evaluation harness) only when HM asks.
+No classifier or ML work.
+
+---
+
 ## 2026-09-06 — Module 11D: known-SPS integer symbol-timing recovery
 
 ### Decision
